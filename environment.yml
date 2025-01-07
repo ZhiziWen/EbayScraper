@@ -1,0 +1,10 @@
+name: ebay-scraper
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - requests
+  - beautifulsoup4
+  - pandas
+  - pip 
