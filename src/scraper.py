@@ -159,20 +159,42 @@ class EbayScraper:
         print(f"Days difference: {days_diff}")
         return days_diff <= 30
 
+    def save_results_to_csv(self, df, set_number):
+        """Save results to CSV with specific naming format."""
+        if df is None or df.empty:
+            return None
+            
+        # Get the date range from the data
+        df['End Time'] = pd.to_datetime(df['End Time'])
+        start_date = df['End Time'].min().strftime('%Y%m%d')
+        end_date = df['End Time'].max().strftime('%Y%m%d')
+        current_time = datetime.now().strftime('%H%M%S')
+        
+        # Create filename with the specified format
+        filename = f'Ebay_Lego_{set_number}_{start_date}_{end_date}_{current_time}.csv'
+        filepath = os.path.join(self.data_dir, filename)
+        
+        print(f"\nSaving results for set {set_number} to {filepath}")
+        df.to_csv(filepath, index=False)
+        return filepath
+
     def fetch_ebay_sold_items(self, set_numbers):
         """Fetch sold items for given LEGO set numbers from eBay Germany."""
-        all_results = []
+        all_results = {}  # Dictionary to store results for each set number
         driver = self.setup_driver()
+        saved_files = []  # List to store all saved file paths
         
         for set_number in set_numbers:
             print(f"\n{'='*80}")
             print(f"Searching for LEGO set {set_number}...")
             print(f"{'='*80}")
             
+            set_results = []  # List to store results for current set number
             page = 1
             has_next_page = True
+            reached_old_items = False
             
-            while has_next_page:
+            while has_next_page and not reached_old_items:
                 url = f'https://www.ebay.de/sch/i.html?_nkw=LEGO+{set_number}&_sop=12&LH_Complete=1&LH_Sold=1&_pgn={page}'
                 print(f"\nFetching page {page} - URL: {url}")
                 
@@ -204,6 +226,9 @@ class EbayScraper:
                     next_page = soup.select_one('a.pagination__next')
                     has_next_page = next_page is not None
                     
+                    old_items_count = 0  # Counter for items older than 30 days
+                    valid_items_on_page = 0  # Counter for valid items on this page
+                    
                     for idx, item in enumerate(items, 1):
                         try:
                             print(f"\nProcessing item {idx}/{len(items)} on page {page}")
@@ -226,17 +251,7 @@ class EbayScraper:
                                 print("Invalid title - skipping")
                                 continue
                                 
-                            # Extract price
-                            price_elem = item.select_one('span.s-item__price')
-                            print(f"Price element: {price_elem.text if price_elem else None}")
-                            item_price = self.parse_price(price_elem.text if price_elem else None)
-                            
-                            # Extract shipping cost
-                            shipping_elem = item.select_one('span.s-item__shipping')
-                            print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
-                            shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
-                            
-                            # Extract sold date
+                            # Extract sold date first to check if we should continue
                             date_elem = (
                                 item.find('span', string=re.compile(r'Verkauft|Beendet')) or
                                 item.find('div', string=re.compile(r'Verkauft|Beendet')) or
@@ -250,11 +265,29 @@ class EbayScraper:
                             # Parse the date
                             parsed_date = self.parse_date(sold_date)
                             
-                            # Skip if not within last 30 days
+                            # Check if item is within 30 days
                             if not self.is_within_30_days(sold_date):
                                 print("Item not sold within last 30 days - skipping")
+                                old_items_count += 1
+                                # If we've found multiple old items, assume we've reached the cutoff
+                                if old_items_count >= 3 and valid_items_on_page > 0:
+                                    print("\nFound multiple items older than 30 days - stopping pagination")
+                                    reached_old_items = True
+                                    break
                                 continue
                                 
+                            valid_items_on_page += 1
+                                
+                            # Extract price
+                            price_elem = item.select_one('span.s-item__price')
+                            print(f"Price element: {price_elem.text if price_elem else None}")
+                            item_price = self.parse_price(price_elem.text if price_elem else None)
+                            
+                            # Extract shipping cost
+                            shipping_elem = item.select_one('span.s-item__shipping')
+                            print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
+                            shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
+                            
                             # Extract URL
                             url_elem = item.select_one('a.s-item__link')
                             item_url = url_elem['href'] if url_elem else None
@@ -272,24 +305,28 @@ class EbayScraper:
                                 'Item Price': item_price,
                                 'Shipping Fee': shipping_cost,
                                 'Total Price': total_price,
-                                'Currency': 'EUR',
-                                'URL': item_url,
-                                'Set Number': set_number,
                                 'End Time': parsed_date,
-                                'Location': location
+                                'Currency': 'EUR',
+                                'Location': location,
+                                'URL': item_url,
+                                'Set Number': set_number
                             }
                             
-                            all_results.append(result)
+                            set_results.append(result)
                             print(f"Successfully added item to results")
                             
                         except Exception as e:
                             print(f"Error processing item: {str(e)}")
                             continue
                     
-                    if has_next_page:
+                    if reached_old_items:
+                        print(f"\nStopping pagination as we've reached items older than 30 days")
+                        break
+                        
+                    if has_next_page and not reached_old_items:
                         print(f"\nMoving to page {page + 1}")
                         page += 1
-                        time.sleep(2)  # Add delay between pages
+                        time.sleep(2)
                     else:
                         print("\nNo more pages available")
                         
@@ -297,37 +334,46 @@ class EbayScraper:
                     print(f"Error fetching page {page} for set {set_number}: {str(e)}")
                     break
 
+            # Process results for current set number
+            if set_results:
+                # Create DataFrame for current set
+                df = pd.DataFrame(set_results)
+                
+                # Sort by date
+                df['End Time'] = pd.to_datetime(df['End Time'])
+                df = df.sort_values('End Time', ascending=False)
+                
+                # Reorder columns
+                df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL', 'Set Number']]
+                
+                # Save to CSV
+                filepath = self.save_results_to_csv(df, set_number)
+                if filepath:
+                    saved_files.append(filepath)
+                
+                # Store in all_results dictionary
+                all_results[set_number] = df
+                
+                # Print results for current set
+                print(f"\nFound {len(df)} items for set {set_number}")
+                print("\nResults for set {set_number}:")
+                with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
+                    print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
+            else:
+                print(f"\nNo results found for set {set_number}")
+
         # Close the browser
         self.close_driver()
 
         if not all_results:
-            print("\nNo results found!")
+            print("\nNo results found for any set!")
             return None, None
 
-        # Create DataFrame
-        df = pd.DataFrame(all_results)
+        print("\nAll files saved:")
+        for filepath in saved_files:
+            print(filepath)
         
-        # Sort by date
-        df['End Time'] = pd.to_datetime(df['End Time'])
-        df = df.sort_values('End Time', ascending=False)
-        
-        # Reorder columns
-        df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL', 'Set Number']]
-        
-        # Print complete DataFrame
-        print(f"\nFound total of {len(df)} items")
-        print("\nComplete DataFrame:")
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
-            print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
-
-        # Save results
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'ebay_sales_{timestamp}.csv'
-        filepath = os.path.join(self.data_dir, filename)
-        print(f"\nSaving results to {filepath}")
-        df.to_csv(filepath, index=False)
-        
-        return df, filepath
+        return all_results, saved_files
 
 def main():
     """Main function to run the eBay scraper"""
@@ -342,12 +388,13 @@ def main():
             raise ValueError("No valid set numbers provided")
             
         print(f"\nProcessing LEGO sets: {', '.join(set_numbers)}")
-        results, saved_file = scraper.fetch_ebay_sold_items(set_numbers)
+        results, saved_files = scraper.fetch_ebay_sold_items(set_numbers)
         
         if results is not None:
-            print(f"\nResults saved to {saved_file}")
-            print("\nTest Results:")
-            print(results[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
+            print("\nScraping completed successfully!")
+            print("\nFiles saved:")
+            for filepath in saved_files:
+                print(filepath)
             
     except Exception as e:
         print(f"\nError running scraper: {str(e)}")
