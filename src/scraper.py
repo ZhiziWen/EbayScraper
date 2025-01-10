@@ -111,15 +111,36 @@ class EbayScraper:
             
         try:
             print(f"Parsing date: {date_str}")
-            # Convert German date format to datetime
-            # Remove common German text
+            # Convert German month names to English
+            german_to_english = {
+                'Jan': 'Jan', 'Jän': 'Jan', 'Januar': 'January',
+                'Feb': 'Feb', 'Februar': 'February',
+                'Mär': 'Mar', 'März': 'March',
+                'Apr': 'Apr', 'April': 'April',
+                'Mai': 'May',
+                'Jun': 'Jun', 'Juni': 'June',
+                'Jul': 'Jul', 'Juli': 'July',
+                'Aug': 'Aug', 'August': 'August',
+                'Sep': 'Sep', 'September': 'September',
+                'Okt': 'Oct', 'Oktober': 'October',
+                'Nov': 'Nov', 'November': 'November',
+                'Dez': 'Dec', 'Dezember': 'December'
+            }
+            
+            # Remove common German text and clean up
             date_str = (date_str.replace('Verkauft', '')
-                               .replace('am', '')
                                .replace('Beendet:', '')
+                               .replace('am', '')
                                .strip())
+            
+            # Replace German month names with English ones
+            for german, english in german_to_english.items():
+                date_str = date_str.replace(german, english)
+            
+            print(f"Cleaned date string: {date_str}")
             date = parser.parse(date_str, fuzzy=True)
             print(f"Parsed date: {date}")
-            return date
+            return date.strftime('%Y-%m-%d')  # Return formatted date string
         except Exception as e:
             print(f"Error parsing date: {e}")
             return None
@@ -130,7 +151,7 @@ class EbayScraper:
             return True  # Accept items without dates for now
             
         print(f"Checking if date is within 30 days: {date_str}")
-        date = self.parse_date(date_str)
+        date = parser.parse(self.parse_date(date_str) or '', fuzzy=True)
         if not date:
             return True  # Accept items with unparseable dates for now
             
@@ -148,106 +169,133 @@ class EbayScraper:
             print(f"Searching for LEGO set {set_number}...")
             print(f"{'='*80}")
             
-            url = f'https://www.ebay.de/sch/i.html?_nkw=LEGO+{set_number}&_sop=12&LH_Complete=1&LH_Sold=1'
-            print(f"Fetching URL: {url}")
+            page = 1
+            has_next_page = True
             
-            try:
-                # Load the page
-                driver.get(url)
-                time.sleep(2)  # Wait for page to load
+            while has_next_page:
+                url = f'https://www.ebay.de/sch/i.html?_nkw=LEGO+{set_number}&_sop=12&LH_Complete=1&LH_Sold=1&_pgn={page}'
+                print(f"\nFetching page {page} - URL: {url}")
                 
-                # Wait for search results
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "ul.srp-results"))
-                )
-                
-                # Parse the page
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
-                items = soup.select('li.s-item')
-                
-                print(f"\nFound {len(items)} items in search results")
-                
-                for idx, item in enumerate(items, 1):
+                try:
+                    # Load the page
+                    driver.get(url)
+                    time.sleep(2)  # Wait for page to load
+                    
+                    # Wait for search results
                     try:
-                        print(f"\nProcessing item {idx}/{len(items)}")
-                        
-                        # Extract title
-                        title_elem = item.select_one('div.s-item__title')
-                        if not title_elem:
-                            print("No title element found")
-                            continue
-                        title = title_elem.text.strip()
-                        print(f"Title: {title}")
-                        
-                        # Validate title
-                        if not self.is_valid_title(title, set_number):
-                            print("Invalid title - skipping")
-                            continue
-                            
-                        # Extract price
-                        price_elem = item.select_one('span.s-item__price')
-                        print(f"Price element: {price_elem.text if price_elem else None}")
-                        item_price = self.parse_price(price_elem.text if price_elem else None)
-                        
-                        # Extract shipping cost
-                        shipping_elem = item.select_one('span.s-item__shipping')
-                        print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
-                        shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
-                        
-                        # Extract sold date (try different selectors)
-                        date_elem = (
-                            item.select_one('span.s-item__endedDate') or  # Primary selector
-                            item.select_one('div.s-item__ended-date') or  # Alternative selector
-                            item.select_one('span.POSITIVE') or  # Status indicator
-                            item.select_one('div.s-item__title--tag') or  # Title tag
-                            item.find('span', string=re.compile(r'Verkauft|Beendet')) or  # Text search
-                            item.find('div', string=re.compile(r'Verkauft|Beendet'))  # Text search in div
+                        WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "ul.srp-results"))
                         )
-                        sold_date = date_elem.text if date_elem else None
-                        print(f"Sold date: {sold_date}")
-                        
-                        # Skip if not within last 30 days
-                        if not self.is_within_30_days(sold_date):
-                            print("Item not sold within last 30 days - skipping")
-                            continue
+                    except TimeoutException:
+                        print("No more results found")
+                        break
+                    
+                    # Parse the page
+                    soup = BeautifulSoup(driver.page_source, 'html.parser')
+                    items = soup.select('li.s-item')
+                    
+                    if not items:
+                        print("No items found on this page")
+                        break
+                    
+                    print(f"\nFound {len(items)} items on page {page}")
+                    
+                    # Check if there's a next page
+                    next_page = soup.select_one('a.pagination__next')
+                    has_next_page = next_page is not None
+                    
+                    for idx, item in enumerate(items, 1):
+                        try:
+                            print(f"\nProcessing item {idx}/{len(items)} on page {page}")
                             
-                        # Extract URL
-                        url_elem = item.select_one('a.s-item__link')
-                        item_url = url_elem['href'] if url_elem else None
+                            # Extract title
+                            title_elem = item.select_one('div.s-item__title')
+                            if not title_elem:
+                                print("No title element found")
+                                continue
+                            title = title_elem.text.strip()
+                            print(f"Title: {title}")
+                            
+                            # Skip the first item on page 1 (it's usually "Shop on eBay")
+                            if page == 1 and idx == 1 and title == "Shop on eBay":
+                                print("Skipping 'Shop on eBay' item")
+                                continue
+                            
+                            # Validate title
+                            if not self.is_valid_title(title, set_number):
+                                print("Invalid title - skipping")
+                                continue
+                                
+                            # Extract price
+                            price_elem = item.select_one('span.s-item__price')
+                            print(f"Price element: {price_elem.text if price_elem else None}")
+                            item_price = self.parse_price(price_elem.text if price_elem else None)
+                            
+                            # Extract shipping cost
+                            shipping_elem = item.select_one('span.s-item__shipping')
+                            print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
+                            shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
+                            
+                            # Extract sold date
+                            date_elem = (
+                                item.find('span', string=re.compile(r'Verkauft|Beendet')) or
+                                item.find('div', string=re.compile(r'Verkauft|Beendet')) or
+                                item.select_one('span.s-item__endedDate') or
+                                item.select_one('div.s-item__ended-date') or
+                                item.select_one('span.POSITIVE')
+                            )
+                            sold_date = date_elem.text if date_elem else None
+                            print(f"Found date element: {sold_date}")
+                            
+                            # Parse the date
+                            parsed_date = self.parse_date(sold_date)
+                            
+                            # Skip if not within last 30 days
+                            if not self.is_within_30_days(sold_date):
+                                print("Item not sold within last 30 days - skipping")
+                                continue
+                                
+                            # Extract URL
+                            url_elem = item.select_one('a.s-item__link')
+                            item_url = url_elem['href'] if url_elem else None
+                            
+                            # Extract location
+                            location_elem = item.select_one('span.s-item__location') or item.select_one('span.s-item__itemLocation')
+                            location = location_elem.text if location_elem else 'Deutschland'
+                            print(f"Location: {location}")
+                            
+                            # Calculate total price
+                            total_price = item_price + shipping_cost
+                            
+                            result = {
+                                'Title': title,
+                                'Item Price': item_price,
+                                'Shipping Fee': shipping_cost,
+                                'Total Price': total_price,
+                                'Currency': 'EUR',
+                                'URL': item_url,
+                                'Set Number': set_number,
+                                'End Time': parsed_date,
+                                'Location': location
+                            }
+                            
+                            all_results.append(result)
+                            print(f"Successfully added item to results")
+                            
+                        except Exception as e:
+                            print(f"Error processing item: {str(e)}")
+                            continue
+                    
+                    if has_next_page:
+                        print(f"\nMoving to page {page + 1}")
+                        page += 1
+                        time.sleep(2)  # Add delay between pages
+                    else:
+                        print("\nNo more pages available")
                         
-                        # Extract location
-                        location_elem = item.select_one('span.s-item__location') or item.select_one('span.s-item__itemLocation')
-                        location = location_elem.text if location_elem else 'Deutschland'  # Default to Deutschland if not specified
-                        print(f"Location: {location}")
-                        
-                        # Calculate total price
-                        total_price = item_price + shipping_cost
-                        
-                        result = {
-                            'Title': title,
-                            'Item Price': item_price,
-                            'Shipping Fee': shipping_cost,
-                            'Total Price': total_price,
-                            'Currency': 'EUR',
-                            'URL': item_url,
-                            'Set Number': set_number,
-                            'End Time': sold_date,
-                            'Location': location
-                        }
-                        
-                        all_results.append(result)
-                        print(f"Successfully added item to results")
-                        
-                    except Exception as e:
-                        print(f"Error processing item: {str(e)}")
-                        continue
-                        
-            except Exception as e:
-                print(f"Error fetching data for set {set_number}: {str(e)}")
-                continue
-                
-            # Add delay between searches
-            time.sleep(2)
+                except Exception as e:
+                    print(f"Error fetching page {page} for set {set_number}: {str(e)}")
+                    break
 
         # Close the browser
         self.close_driver()
@@ -260,13 +308,17 @@ class EbayScraper:
         df = pd.DataFrame(all_results)
         
         # Sort by date
-        df['End Time'] = pd.to_datetime(df['End Time'], errors='coerce')
+        df['End Time'] = pd.to_datetime(df['End Time'])
         df = df.sort_values('End Time', ascending=False)
         
+        # Reorder columns
+        df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL', 'Set Number']]
+        
         # Print complete DataFrame
+        print(f"\nFound total of {len(df)} items")
         print("\nComplete DataFrame:")
         with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
-            print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'Currency', 'Location', 'End Time', 'URL']])
+            print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
 
         # Save results
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -295,7 +347,7 @@ def main():
         if results is not None:
             print(f"\nResults saved to {saved_file}")
             print("\nTest Results:")
-            print(results[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'Currency', 'Location', 'End Time', 'URL']])
+            print(results[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
             
     except Exception as e:
         print(f"\nError running scraper: {str(e)}")
