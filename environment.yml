@@ -4,7 +4,10 @@ channels:
   - conda-forge
 dependencies:
   - python=3.9
+  - pandas
+  - flask
   - requests
   - beautifulsoup4
-  - pandas
-  - pip 
+  - selenium
+  - webdriver-manager
+  - python-dateutil 

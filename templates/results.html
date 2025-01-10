@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEGO Price Results</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">LEGO Price Results</h1>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Item Price (EUR)</th>
+                    <th>Shipping Fee (EUR)</th>
+                    <th>Total Price (EUR)</th>
+                    <th>Sold Time</th>
+                    <th>Location</th>
+                    <th>Link</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr>
+                    <td>{{ result['Title'] }}</td>
+                    <td>{{ result['Item Price'] }}</td>
+                    <td>{{ result['Shipping Fee'] }}</td>
+                    <td>{{ result['Total Price'] }}</td>
+                    <td>{{ result['End Time'] }}</td>
+                    <td>{{ result['Location'] }}</td>
+                    <td><a href="{{ result['URL'] }}" target="_blank">View Item</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <a href="/" class="btn btn-primary">Search Again</a>
+    </div>
+</body>
+</html> 
