@@ -75,10 +75,14 @@ class EbayScraper:
         target_length = len(target_set)
         same_length_numbers = [num for num in numbers if len(num) == target_length]
         
-        # If we have more than one number with the same length as target_set, reject
+        # If we have more than one number with the same length as target_set, check if all are the target
         if len(same_length_numbers) > 1:
-            print(f"Found multiple numbers with length {target_length}: {same_length_numbers} - rejecting")
-            return False
+            if all(num == target_set for num in same_length_numbers):
+                print(f"All numbers match the target set number: {same_length_numbers} - accepting")
+                return True
+            else:
+                print(f"Found multiple numbers with length {target_length} that do not match target: {same_length_numbers} - rejecting")
+                return False
             
         # If we have exactly one number with the same length, it must be our target
         if len(same_length_numbers) == 1:
@@ -180,212 +184,213 @@ class EbayScraper:
         df.to_csv(filepath, index=False)
         return filepath
 
-    def fetch_ebay_sold_items(self, set_numbers):
-        """Fetch sold items for given LEGO set numbers from eBay Germany."""
-        all_results = {}  # Dictionary to store results for each set number
+    def fetch_ebay_sold_items(self, set_number):
+        """Fetch sold items for a given LEGO set number from eBay Germany."""
         driver = self.setup_driver()
-        saved_files = []  # List to store all saved file paths
+        results = []  # List to store results
         
-        for set_number in set_numbers:
-            print(f"\n{'='*80}")
-            print(f"Searching for LEGO set {set_number}...")
-            print(f"{'='*80}")
+        print(f"\n{'='*80}")
+        print(f"Searching for LEGO set {set_number}...")
+        print(f"{'='*80}")
+        
+        page = 1
+        has_next_page = True
+        reached_old_items = False
+        
+        while has_next_page and not reached_old_items:
+            url = f'https://www.ebay.de/sch/i.html?_nkw=LEGO+{set_number}&_sop=12&LH_Complete=1&LH_Sold=1&_pgn={page}'
+            print(f"\nFetching page {page} - URL: {url}")
             
-            set_results = []  # List to store results for current set number
-            page = 1
-            has_next_page = True
-            reached_old_items = False
-            
-            while has_next_page and not reached_old_items:
-                url = f'https://www.ebay.de/sch/i.html?_nkw=LEGO+{set_number}&_sop=12&LH_Complete=1&LH_Sold=1&_pgn={page}'
-                print(f"\nFetching page {page} - URL: {url}")
+            try:
+                # Load the page
+                driver.get(url)
+                time.sleep(2)  # Wait for page to load
                 
+                # Wait for search results
                 try:
-                    # Load the page
-                    driver.get(url)
-                    time.sleep(2)  # Wait for page to load
-                    
-                    # Wait for search results
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "ul.srp-results"))
+                    )
+                except TimeoutException:
+                    print("No more results found")
+                    break
+                
+                # Parse the page
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                items = soup.select('li.s-item')
+                
+                if not items:
+                    print("No items found on this page")
+                    break
+                
+                print(f"\nFound {len(items)} items on page {page}")
+                
+                # Check if there's a next page
+                next_page = soup.select_one('a.pagination__next')
+                has_next_page = next_page is not None
+                
+                old_items_count = 0  # Counter for items older than 30 days
+                valid_items_on_page = 0  # Counter for valid items on this page
+                
+                for idx, item in enumerate(items, 1):
                     try:
-                        WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "ul.srp-results"))
+                        print(f"\nProcessing item {idx}/{len(items)} on page {page}")
+                        
+                        # Extract title
+                        title_elem = item.select_one('div.s-item__title')
+                        if not title_elem:
+                            print("No title element found")
+                            continue
+                        title = title_elem.text.strip()
+                        print(f"Title: {title}")
+                        
+                        # Skip the first item on page 1 (it's usually "Shop on eBay")
+                        if page == 1 and idx == 1 and title == "Shop on eBay":
+                            print("Skipping 'Shop on eBay' item")
+                            continue
+                        
+                        # Validate title
+                        if not self.is_valid_title(title, set_number):
+                            print("Invalid title - skipping")
+                            continue
+                            
+                        # Extract sold date first to check if we should continue
+                        date_elem = (
+                            item.find('span', string=re.compile(r'Verkauft|Beendet')) or
+                            item.find('div', string=re.compile(r'Verkauft|Beendet')) or
+                            item.select_one('span.s-item__endedDate') or
+                            item.select_one('div.s-item__ended-date') or
+                            item.select_one('span.POSITIVE')
                         )
-                    except TimeoutException:
-                        print("No more results found")
-                        break
-                    
-                    # Parse the page
-                    soup = BeautifulSoup(driver.page_source, 'html.parser')
-                    items = soup.select('li.s-item')
-                    
-                    if not items:
-                        print("No items found on this page")
-                        break
-                    
-                    print(f"\nFound {len(items)} items on page {page}")
-                    
-                    # Check if there's a next page
-                    next_page = soup.select_one('a.pagination__next')
-                    has_next_page = next_page is not None
-                    
-                    old_items_count = 0  # Counter for items older than 30 days
-                    valid_items_on_page = 0  # Counter for valid items on this page
-                    
-                    for idx, item in enumerate(items, 1):
-                        try:
-                            print(f"\nProcessing item {idx}/{len(items)} on page {page}")
+                        sold_date = date_elem.text if date_elem else None
+                        print(f"Found date element: {sold_date}")
+                        
+                        # Parse the date
+                        parsed_date = self.parse_date(sold_date)
+                        
+                        # Check if item is within 30 days
+                        if not self.is_within_30_days(sold_date):
+                            print("Item not sold within last 30 days - skipping")
+                            old_items_count += 1
+                            # If we've found multiple old items, assume we've reached the cutoff
+                            if old_items_count >= 3 and valid_items_on_page > 0:
+                                print("\nFound multiple items older than 30 days - stopping pagination")
+                                reached_old_items = True
+                                break
+                            continue
                             
-                            # Extract title
-                            title_elem = item.select_one('div.s-item__title')
-                            if not title_elem:
-                                print("No title element found")
-                                continue
-                            title = title_elem.text.strip()
-                            print(f"Title: {title}")
+                        valid_items_on_page += 1
                             
-                            # Skip the first item on page 1 (it's usually "Shop on eBay")
-                            if page == 1 and idx == 1 and title == "Shop on eBay":
-                                print("Skipping 'Shop on eBay' item")
-                                continue
-                            
-                            # Validate title
-                            if not self.is_valid_title(title, set_number):
-                                print("Invalid title - skipping")
-                                continue
-                                
-                            # Extract sold date first to check if we should continue
-                            date_elem = (
-                                item.find('span', string=re.compile(r'Verkauft|Beendet')) or
-                                item.find('div', string=re.compile(r'Verkauft|Beendet')) or
-                                item.select_one('span.s-item__endedDate') or
-                                item.select_one('div.s-item__ended-date') or
-                                item.select_one('span.POSITIVE')
-                            )
-                            sold_date = date_elem.text if date_elem else None
-                            print(f"Found date element: {sold_date}")
-                            
-                            # Parse the date
-                            parsed_date = self.parse_date(sold_date)
-                            
-                            # Check if item is within 30 days
-                            if not self.is_within_30_days(sold_date):
-                                print("Item not sold within last 30 days - skipping")
-                                old_items_count += 1
-                                # If we've found multiple old items, assume we've reached the cutoff
-                                if old_items_count >= 3 and valid_items_on_page > 0:
-                                    print("\nFound multiple items older than 30 days - stopping pagination")
-                                    reached_old_items = True
-                                    break
-                                continue
-                                
-                            valid_items_on_page += 1
-                                
-                            # Extract price
-                            price_elem = item.select_one('span.s-item__price')
-                            print(f"Price element: {price_elem.text if price_elem else None}")
-                            item_price = self.parse_price(price_elem.text if price_elem else None)
-                            
-                            # Extract shipping cost
-                            shipping_elem = item.select_one('span.s-item__shipping')
-                            print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
-                            shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
-                            
-                            # Extract URL
-                            url_elem = item.select_one('a.s-item__link')
-                            item_url = url_elem['href'] if url_elem else None
-                            
-                            # Extract location
-                            location_elem = item.select_one('span.s-item__location') or item.select_one('span.s-item__itemLocation')
-                            location = location_elem.text if location_elem else 'Deutschland'
-                            if location.startswith('aus '):
-                                location = location[4:]  # Remove 'aus ' prefix
-                            print(f"Location: {location}")
-                            
-                            # Extract item condition
-                            condition_elem = item.select_one('span.SECONDARY_INFO')
-                            condition = condition_elem.text.strip() if condition_elem else 'Unknown'
-                            print(f"Condition: {condition}")
-                            
-                            # Extract seller type
-                            seller_elem = item.select_one('div.s-item__subtitle')
-                            if seller_elem:
-                                seller_text = seller_elem.text
-                                if 'Gewerblich' in seller_text:
-                                    seller_type = 'Gewerblich'
-                                elif 'Privat' in seller_text:
-                                    seller_type = 'Privat'
-                                else:
-                                    seller_type = 'Unknown'
+                        # Extract price
+                        price_elem = item.select_one('span.s-item__price')
+                        print(f"Price element: {price_elem.text if price_elem else None}")
+                        item_price = self.parse_price(price_elem.text if price_elem else None)
+                        
+                        # Extract shipping cost
+                        shipping_elem = item.select_one('span.s-item__shipping')
+                        print(f"Shipping element: {shipping_elem.text if shipping_elem else None}")
+                        shipping_cost = self.parse_price(shipping_elem.text if shipping_elem else None)
+                        
+                        # Extract URL
+                        url_elem = item.select_one('a.s-item__link')
+                        item_url = url_elem['href'] if url_elem else None
+                        
+                        # Extract location
+                        location_elem = item.select_one('span.s-item__location') or item.select_one('span.s-item__itemLocation')
+                        location = location_elem.text if location_elem else 'Deutschland'
+                        if location.startswith('aus '):
+                            location = location[4:]  # Remove 'aus ' prefix
+                        print(f"Location: {location}")
+                        
+                        # Extract item condition
+                        condition_elem = item.select_one('span.SECONDARY_INFO')
+                        condition = condition_elem.text.strip() if condition_elem else 'Unknown'
+                        print(f"Condition: {condition}")
+                        
+                        # Extract seller type
+                        seller_elem = item.select_one('div.s-item__subtitle')
+                        if seller_elem:
+                            seller_text = seller_elem.text
+                            if 'Gewerblich' in seller_text:
+                                seller_type = 'Gewerblich'
+                            elif 'Privat' in seller_text:
+                                seller_type = 'Privat'
                             else:
                                 seller_type = 'Unknown'
-                            print(f"Seller Type: {seller_type}")
-                            
-                            # Calculate total price
-                            total_price = round(item_price + shipping_cost, 2)
-                            
-                            result = {
-                                'Title': title,
-                                'Item Price': item_price,
-                                'Shipping Fee': shipping_cost,
-                                'Total Price': total_price,
-                                'End Time': parsed_date,
-                                'Currency': 'EUR',
-                                'Location': location,
-                                'URL': item_url,
-                                'Set Number': set_number,
-                                'Condition': condition,
-                                'Seller Type': seller_type
-                            }
-                            
-                            set_results.append(result)
-                            print(f"Successfully added item to results")
-                            
-                        except Exception as e:
-                            print(f"Error processing item: {str(e)}")
-                            continue
-                    
-                    if reached_old_items:
-                        print(f"\nStopping pagination as we've reached items older than 30 days")
-                        break
+                        else:
+                            seller_type = 'Unknown'
+                        print(f"Seller Type: {seller_type}")
                         
-                    if has_next_page and not reached_old_items:
-                        print(f"\nMoving to page {page + 1}")
-                        page += 1
-                        time.sleep(2)
-                    else:
-                        print("\nNo more pages available")
+                        # Calculate total price
+                        total_price = round(item_price + shipping_cost, 2)
                         
-                except Exception as e:
-                    print(f"Error fetching page {page} for set {set_number}: {str(e)}")
+                        result = {
+                            'Title': title,
+                            'Item Price': item_price,
+                            'Shipping Fee': shipping_cost,
+                            'Total Price': total_price,
+                            'End Time': parsed_date,
+                            'Currency': 'EUR',
+                            'Location': location,
+                            'URL': item_url,
+                            'Set Number': set_number,
+                            'Condition': condition,
+                            'Seller Type': seller_type
+                        }
+                        
+                        results.append(result)
+                        print(f"Successfully added item to results")
+                        
+                    except Exception as e:
+                        print(f"Error processing item: {str(e)}")
+                        continue
+                
+                if reached_old_items:
+                    print(f"\nStopping pagination as we've reached items older than 30 days")
                     break
+                    
+                if has_next_page and not reached_old_items:
+                    print(f"\nMoving to page {page + 1}")
+                    page += 1
+                    time.sleep(2)
+                else:
+                    print("\nNo more pages available")
+                    
+            except Exception as e:
+                print(f"Error fetching page {page} for set {set_number}: {str(e)}")
+                break
 
-            # Process results for current set number
-            if set_results:
-                # Create DataFrame for current set
-                df = pd.DataFrame(set_results)
-                
-                # Sort by date
-                df['End Time'] = pd.to_datetime(df['End Time'])
-                df = df.sort_values('End Time', ascending=False)
-                
-                # Reorder columns
-                df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL', 'Set Number']]
-                
-                # Save to CSV
-                filepath = self.save_results_to_csv(df, set_number)
-                if filepath:
-                    saved_files.append(filepath)
-                
-                # Store in all_results dictionary
-                all_results[set_number] = df
-                
-                # Print results for current set
-                print(f"\nFound {len(df)} items for set {set_number}")
-                print("\nResults for set {set_number}:")
-                with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
-                    print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL']])
-            else:
-                print(f"\nNo results found for set {set_number}")
+        # Process results for current set number
+        if results:
+            # Create DataFrame for current set
+            df = pd.DataFrame(results)
+            
+            # Sort by date
+            df['End Time'] = pd.to_datetime(df['End Time'])
+            df = df.sort_values('End Time', ascending=False)
+            
+            # Reorder columns
+            df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL', 'Set Number']]
+            
+            # Ensure 'Seller Type' column is present
+            if 'Seller Type' not in df.columns:
+                df['Seller Type'] = 'Unknown'
+            
+            # Save to CSV
+            filepath = self.save_results_to_csv(df, set_number)
+            if filepath:
+                return df
+            
+            # Store in all_results dictionary
+            all_results[set_number] = df
+            
+            # Print results for current set
+            print(f"\nFound {len(df)} items for set {set_number}")
+            print("\nResults for set {set_number}:")
+            with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
+                print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL']])
+        else:
+            print(f"\nNo results found for set {set_number}")
 
         # Close the browser
         self.close_driver()
