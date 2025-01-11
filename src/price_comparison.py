@@ -5,15 +5,18 @@ This script compares personal LEGO inventory prices with current eBay market val
 Features:
 - Reads personal inventory from Excel file
 - Fetches current market prices using scraper.py
-- Calculates adjusted average prices by seller type
+- Calculates average and median prices
+- Filters for new items from Germany
 - Compares prices and calculates difference percentages
-- Saves results to CSV file
+- Saves results to CSV file with timestamp
+- Supports two modes: analyze all sets or specific set numbers
 """
 
 import pandas as pd
 import os
 from datetime import datetime
 from scraper import EbayScraper
+import sys
 
 class PriceComparisonTool:
     def __init__(self):
@@ -26,91 +29,92 @@ class PriceComparisonTool:
         self.scraper = EbayScraper()
         print("Price Comparison Tool initialized")
 
-    def read_inventory(self):
-        """Read the inventory from Excel file."""
+    def read_inventory(self, set_numbers=None):
+        """Read the inventory from Excel file.
+        Args:
+            set_numbers (list): Optional list of set numbers to filter for
+        """
         try:
             print(f"\nReading inventory from {self.inventory_file}")
-            # Read all sheets to find the correct one
-            xl = pd.ExcelFile(self.inventory_file)
-            print("Available sheets:", xl.sheet_names)
             
             # Read the 'Overview Total' sheet
             df = pd.read_excel(self.inventory_file, sheet_name='Overview Total')
-            print("Columns in inventory file:", df.columns.tolist())
             
             # Clean up the data
-            df = df.dropna(how='all')  # Remove empty rows
-            df = df.dropna(how='all', axis=1)  # Remove empty columns
+            df = df.dropna(how='all')  # Remove completely empty rows
+            df = df.dropna(how='all', axis=1)  # Remove completely empty columns
             
-            # Rename unnamed columns if needed
-            df.columns = [str(col) if not str(col).startswith('Unnamed:') else f'Column_{i}' 
-                         for i, col in enumerate(df.columns)]
+            # Filter rows that have valid set numbers and are not summary rows
+            valid_data = df[
+                df['Set'].notna() &  # Set number exists
+                df['Set'].astype(str).str.match(r'^\d+$').fillna(False) &  # Set is numeric
+                df['Average price'].notna()  # Price exists
+            ]
             
-            print("Cleaned columns:", df.columns.tolist())
-            print(f"Found {len(df)} sets in inventory")
+            # Create inventory data with correct columns
+            inventory_data = pd.DataFrame()
+            inventory_data['Set'] = valid_data['Set'].astype(str).apply(lambda x: str(int(float(x))))
+            inventory_data['Average Price'] = valid_data['Average price']
             
-            # Display first few rows to verify data
-            print("\nFirst few rows of inventory:")
-            print(df.head())
+            # Remove any remaining invalid data
+            inventory_data = inventory_data.dropna()
+            inventory_data = inventory_data[inventory_data['Average Price'] > 0]
             
-            return df
+            # Filter for specific set numbers if provided
+            if set_numbers:
+                set_numbers = [str(num) for num in set_numbers]
+                inventory_data = inventory_data[inventory_data['Set'].isin(set_numbers)]
+                if inventory_data.empty:
+                    print(f"No matching sets found in inventory for: {set_numbers}")
+                    return None
+            
+            print(f"\nFound {len(inventory_data)} sets in inventory")
+            return inventory_data
         except Exception as e:
             print(f"Error reading inventory: {e}")
             return None
 
-    def calculate_averages(self, ebay_data):
-        """Calculate average prices by seller type."""
+    def calculate_market_stats(self, ebay_data):
+        """Calculate market statistics including averages and medians."""
         if ebay_data is None or ebay_data.empty:
             return {
                 'avg_price': 0,
+                'median_price': 0,
                 'avg_shipping': 0,
-                'adjusted_price': 0
+                'median_shipping': 0,
+                'items_found': 0
             }
 
-        # Filter for Deutschland location
-        ebay_data = ebay_data[ebay_data['Location'].str.contains('Deutschland', case=False, na=False)]
+        # Filter for Deutschland location and Brandneu condition
+        filtered_data = ebay_data[
+            (ebay_data['Location'].str.contains('Deutschland', case=False, na=False)) &
+            (ebay_data['Condition'] == 'Brandneu')
+        ]
         
-        # Calculate average shipping (excluding 0 shipping costs)
-        shipping_data = ebay_data[ebay_data['Shipping Fee'] > 0]['Shipping Fee']
+        if filtered_data.empty:
+            return {
+                'avg_price': 0,
+                'median_price': 0,
+                'avg_shipping': 0,
+                'median_shipping': 0,
+                'items_found': 0
+            }
+
+        # Calculate shipping statistics (excluding 0 shipping)
+        shipping_data = filtered_data[filtered_data['Shipping Fee'] > 0]['Shipping Fee']
         avg_shipping = shipping_data.mean() if not shipping_data.empty else 0
-        
-        # Calculate average total price
-        avg_total = ebay_data['Total Price'].mean() if not ebay_data.empty else 0
-        
-        # Calculate adjusted price
-        adjusted_price = avg_total - avg_shipping if avg_total > 0 else 0
+        median_shipping = shipping_data.median() if not shipping_data.empty else 0
+
+        # Calculate total price statistics
+        avg_total = filtered_data['Total Price'].mean()
+        median_total = filtered_data['Total Price'].median()
 
         return {
-            'avg_price': adjusted_price,
+            'avg_price': avg_total - avg_shipping,
+            'median_price': median_total - median_shipping,
             'avg_shipping': avg_shipping,
-            'adjusted_price': adjusted_price
-        }
-
-    def process_set_data(self, ebay_data):
-        """Process the eBay data for a single set."""
-        if not ebay_data:
-            print("No data found for this set")
-            return None
-
-        # Convert dictionary to DataFrame with a single row index
-        ebay_data = pd.DataFrame([ebay_data])  # Wrap the dict in a list to create a single row
-
-        # Calculate average prices by seller type
-        avg_prices = ebay_data.groupby('Seller Type')['Total Price'].agg(['mean', 'count']).round(2)
-        avg_prices.columns = ['Average Price', 'Count']
-        
-        # Calculate overall statistics
-        stats = {
-            'Overall Average': ebay_data['Total Price'].mean().round(2),
-            'Minimum Price': ebay_data['Total Price'].min().round(2),
-            'Maximum Price': ebay_data['Total Price'].max().round(2),
-            'Number of Items': len(ebay_data)
-        }
-        
-        return {
-            'data': ebay_data,
-            'averages': avg_prices,
-            'stats': stats
+            'median_shipping': median_shipping,
+            'items_found': len(filtered_data)
         }
 
     def calculate_price_diff(self, market_price, my_price):
@@ -119,21 +123,21 @@ class PriceComparisonTool:
             return 0
         return ((market_price - my_price) / my_price) * 100
 
-    def compare_prices(self):
-        """Compare prices between inventory and current market data."""
-        inventory_data = self.read_inventory()
+    def compare_prices(self, set_numbers=None):
+        """Compare prices between inventory and current market data.
+        Args:
+            set_numbers (list): Optional list of set numbers to analyze
+        """
+        inventory_data = self.read_inventory(set_numbers)
         if inventory_data is None or inventory_data.empty:
             print("No inventory data found")
             return None
 
-        # Get the first 5 sets
-        first_5_sets = inventory_data.head(5)
         results = []
-
-        for _, row in first_5_sets.iterrows():
+        for _, row in inventory_data.iterrows():
             try:
-                # Convert set number to string and remove any decimal points and trailing zeros
-                set_number = str(int(float(row['Set'])))
+                set_number = row['Set']
+                my_price = float(row['Average Price'])
                 print(f"\nProcessing set {set_number}")
                 
                 # Get current market data
@@ -142,41 +146,25 @@ class PriceComparisonTool:
                     print(f"No market data found for set {set_number}")
                     continue
                 
-                # Calculate statistics
-                stats = {
-                    'Overall Average': ebay_data['Total Price'].mean().round(2),
-                    'Minimum Price': ebay_data['Total Price'].min().round(2),
-                    'Maximum Price': ebay_data['Total Price'].max().round(2),
-                    'Number of Items': len(ebay_data)
-                }
+                # Calculate market statistics
+                stats = self.calculate_market_stats(ebay_data)
                 
-                # Calculate averages by seller type
-                avg_prices = ebay_data.groupby('Seller Type')['Total Price'].agg(['mean', 'count']).round(2)
-                avg_prices.columns = ['Average Price', 'Count']
+                # Calculate price differences and potential profits
+                avg_diff = self.calculate_price_diff(stats['avg_price'], my_price)
+                median_diff = self.calculate_price_diff(stats['median_price'], my_price)
                 
                 result = {
-                    'Set Number': set_number,
-                    'Inventory Price': row['Average price'],
-                    'Market Average': stats['Overall Average'],
-                    'Market Min': stats['Minimum Price'],
-                    'Market Max': stats['Maximum Price'],
-                    'Items Found': stats['Number of Items']
+                    'LEGO Set Number': set_number,
+                    'My Avg Buy Price': my_price,
+                    'Market Avg Price': stats['avg_price'],
+                    'Market Median Price': stats['median_price'],
+                    'Avg Price Diff %': avg_diff,
+                    'Median Price Diff %': median_diff,
+                    'Potential Profit (Avg)': stats['avg_price'] - my_price,
+                    'Potential Profit (Median)': stats['median_price'] - my_price,
+                    'Avg Shipping': stats['avg_shipping'],
+                    'Median Shipping': stats['median_shipping']
                 }
-                
-                # Add seller type averages if available
-                if 'Privat' in avg_prices.index:
-                    result['Privat Avg Price'] = avg_prices.loc['Privat', 'Average Price']
-                    result['Privat Count'] = avg_prices.loc['Privat', 'Count']
-                else:
-                    result['Privat Avg Price'] = 0
-                    result['Privat Count'] = 0
-                    
-                if 'Gewerblich' in avg_prices.index:
-                    result['Gewerblich Avg Price'] = avg_prices.loc['Gewerblich', 'Average Price']
-                    result['Gewerblich Count'] = avg_prices.loc['Gewerblich', 'Count']
-                else:
-                    result['Gewerblich Avg Price'] = 0
-                    result['Gewerblich Count'] = 0
                 
                 results.append(result)
             except Exception as e:
@@ -190,15 +178,13 @@ class PriceComparisonTool:
         # Convert results to DataFrame
         results_df = pd.DataFrame(results)
         
-        # Calculate potential profit
-        results_df['Potential Profit'] = results_df['Market Average'] - results_df['Inventory Price']
-        
-        # Sort by potential profit
-        results_df = results_df.sort_values('Potential Profit', ascending=False)
+        # Generate timestamp for filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'price_comparison_results_{timestamp}.csv'
         
         # Save results
-        results_df.to_csv(os.path.join(self.data_dir, 'price_comparison_results.csv'), index=False)
-        print("\nResults saved to price_comparison_results.csv")
+        results_df.to_csv(os.path.join(self.data_dir, filename), index=False)
+        print(f"\nResults saved to {filename}")
         
         return results_df
 
@@ -206,7 +192,15 @@ def main():
     """Main function to run the price comparison tool."""
     print("\nStarting LEGO Price Comparison Tool...")
     tool = PriceComparisonTool()
-    results = tool.compare_prices()
+    
+    # Check if specific set numbers were provided as command line arguments
+    if len(sys.argv) > 1:
+        set_numbers = sys.argv[1:]
+        print(f"\nAnalyzing specific sets: {set_numbers}")
+        results = tool.compare_prices(set_numbers)
+    else:
+        print("\nAnalyzing all sets in inventory")
+        results = tool.compare_prices()
     
     if results is not None:
         print("\nComparison Results:")
