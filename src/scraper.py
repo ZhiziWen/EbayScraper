@@ -29,9 +29,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 from dateutil import parser
 import time
 
+
+
 class EbayScraper:
     def __init__(self):
-        # Setup data directory for saving results
+        # Setup data directory for saving results, create if it doesn't exist
         self.data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
         os.makedirs(self.data_dir, exist_ok=True)
         
@@ -297,6 +299,25 @@ class EbayScraper:
                             location = location_elem.text if location_elem else 'Deutschland'
                             print(f"Location: {location}")
                             
+                            # Extract item condition
+                            condition_elem = item.select_one('span.SECONDARY_INFO')
+                            condition = condition_elem.text.strip() if condition_elem else 'Unknown'
+                            print(f"Condition: {condition}")
+                            
+                            # Extract seller type
+                            seller_elem = item.select_one('div.s-item__subtitle')
+                            if seller_elem:
+                                seller_text = seller_elem.text
+                                if 'Gewerblich' in seller_text:
+                                    seller_type = 'Gewerblich'
+                                elif 'Privat' in seller_text:
+                                    seller_type = 'Privat'
+                                else:
+                                    seller_type = 'Unknown'
+                            else:
+                                seller_type = 'Unknown'
+                            print(f"Seller Type: {seller_type}")
+                            
                             # Calculate total price
                             total_price = item_price + shipping_cost
                             
@@ -309,7 +330,9 @@ class EbayScraper:
                                 'Currency': 'EUR',
                                 'Location': location,
                                 'URL': item_url,
-                                'Set Number': set_number
+                                'Set Number': set_number,
+                                'Condition': condition,
+                                'Seller Type': seller_type
                             }
                             
                             set_results.append(result)
@@ -344,7 +367,7 @@ class EbayScraper:
                 df = df.sort_values('End Time', ascending=False)
                 
                 # Reorder columns
-                df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL', 'Set Number']]
+                df = df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL', 'Set Number']]
                 
                 # Save to CSV
                 filepath = self.save_results_to_csv(df, set_number)
@@ -358,7 +381,7 @@ class EbayScraper:
                 print(f"\nFound {len(df)} items for set {set_number}")
                 print("\nResults for set {set_number}:")
                 with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
-                    print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Currency', 'Location', 'URL']])
+                    print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL']])
             else:
                 print(f"\nNo results found for set {set_number}")
 

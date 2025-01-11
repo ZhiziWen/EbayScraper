@@ -1,13 +1,15 @@
-name: ebay-scraper
+name: ebayfetchsold
 channels:
-  - defaults
   - conda-forge
+  - defaults
 dependencies:
   - python=3.9
+  - pip
+  - flask=2.2.5
+  - werkzeug=2.2.3
   - pandas
-  - flask
-  - requests
-  - beautifulsoup4
   - selenium
-  - webdriver-manager
-  - python-dateutil 
+  - beautifulsoup4
+  - python-dateutil
+  - pip:
+    - webdriver-manager 
