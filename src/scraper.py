@@ -405,6 +405,15 @@ class EbayScraper:
         
         return all_results, saved_files
 
+    def close(self):
+        """Close the WebDriver when done."""
+        try:
+            if hasattr(self, 'driver') and self.driver:
+                self.driver.quit()
+                print("WebDriver closed successfully")
+        except Exception as e:
+            print(f"Error closing WebDriver: {e}")
+
 def main():
     """Main function to run the eBay scraper"""
     print("\nStarting eBay LEGO Price Scraper...")

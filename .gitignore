@@ -44,4 +44,5 @@ chromedriver.exe
 
 # Ignore Inventory and data_ar2 folders
 Inventory/
-data_ar2/ 
+data_ar2/
+data_ar4_done/ 

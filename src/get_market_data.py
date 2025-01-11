@@ -10,16 +10,16 @@ Features:
 - Creates a manifest file listing all generated CSVs
 """
 
-import pandas as pd
 import os
+import sys
 from datetime import datetime
-from scraper import EbayScraper
 import json
+from scraper import EbayScraper
 
 class MarketDataCollector:
     def __init__(self):
-        # Setup directories
-        self.base_dir = os.path.dirname(os.path.dirname(__file__))
+        """Initialize the Market Data Collector."""
+        self.base_dir = os.getcwd()
         self.data_dir = os.path.join(self.base_dir, 'data')
         self.inventory_dir = os.path.join(self.base_dir, 'Inventory')
         self.inventory_file = os.path.join(self.inventory_dir, 'Reselling Profit Calculator2.xlsx')
@@ -29,60 +29,39 @@ class MarketDataCollector:
         os.makedirs(self.inventory_dir, exist_ok=True)
         
         # Initialize scraper
+        print("Scraper initialized")
         self.scraper = EbayScraper()
-        print("Market Data Collector initialized")
-        
-        # Verify inventory file exists
-        if not os.path.exists(self.inventory_file):
-            print(f"Warning: Inventory file not found at {self.inventory_file}")
-            print("Please ensure the Excel file is in the Inventory folder")
+        print("Market Data Collector initialized\n")
 
     def read_inventory(self):
-        """Read the inventory from Excel file.
-        Returns:
-            DataFrame with set numbers and buying prices
-        """
+        """Read inventory from Excel file."""
         try:
-            print(f"\nReading inventory from {self.inventory_file}")
+            import pandas as pd
+            if not os.path.exists(self.inventory_file):
+                print(f"Inventory file not found: {self.inventory_file}")
+                return None
             
-            # Read the 'Overview Total' sheet
+            print(f"Reading inventory from {self.inventory_file}\n")
             df = pd.read_excel(self.inventory_file, sheet_name='Overview Total')
             
-            # Clean up the data
-            df = df.dropna(how='all')  # Remove completely empty rows
-            df = df.dropna(how='all', axis=1)  # Remove completely empty columns
+            # Clean data and extract set numbers
+            df = df.dropna(how='all').dropna(axis=1, how='all')
+            valid_data = df[df['Set'].apply(lambda x: str(x).replace('.0', '').isdigit())]
             
-            # Filter rows that have valid set numbers and are not summary rows
-            valid_data = df[
-                df['Set'].notna() &  # Set number exists
-                df['Set'].astype(str).str.match(r'^\d+$').fillna(False) &  # Set is numeric
-                df['Average price'].notna()  # Price exists
-            ]
-            
-            # Create inventory data with correct columns
-            inventory_data = pd.DataFrame()
-            inventory_data['Set'] = valid_data['Set'].astype(str).apply(lambda x: str(int(float(x))))
-            inventory_data['Set Name'] = valid_data['Set Name']
-            inventory_data['Average Price'] = valid_data['Average price']
-            
-            # Remove any remaining invalid data
-            inventory_data = inventory_data.dropna()
-            inventory_data = inventory_data[inventory_data['Average Price'] > 0]
-            
-            print(f"\nFound {len(inventory_data)} sets in inventory")
-            return inventory_data
+            if valid_data.empty:
+                print("No valid set numbers found in inventory")
+                return None
+                
+            set_numbers = valid_data['Set'].astype(str).str.replace('.0', '').tolist()
+            print(f"Found {len(set_numbers)} sets in inventory\n")
+            return set_numbers
             
         except Exception as e:
             print(f"Error reading inventory: {e}")
             return None
 
     def fetch_and_save_set_data(self, set_number):
-        """Fetch and save market data for a specific set.
-        Args:
-            set_number (str): LEGO set number
-        Returns:
-            str: Path to saved CSV file
-        """
+        """Fetch and save market data for a specific set."""
         try:
             print(f"\nFetching data for set {set_number}")
             
@@ -121,49 +100,59 @@ class MarketDataCollector:
             return None
 
     def create_manifest(self, data_files):
-        """Create a manifest file listing all generated CSVs.
-        Args:
-            data_files (dict): Dictionary mapping set numbers to CSV file paths
-        """
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        manifest_file = os.path.join(self.data_dir, f'market_data_manifest_{timestamp}.json')
-        
-        with open(manifest_file, 'w') as f:
-            json.dump(data_files, f, indent=4)
-        
-        print(f"\nManifest file created: {manifest_file}")
-        return manifest_file
+        """Create a manifest file listing all generated CSVs."""
+        try:
+            if not data_files:
+                print("No data files to include in manifest")
+                return None
+                
+            manifest = {
+                'timestamp': datetime.now().strftime('%Y%m%d_%H%M%S'),
+                'files': data_files
+            }
+            
+            filename = f'market_data_manifest_{manifest["timestamp"]}.json'
+            filepath = os.path.join(self.data_dir, filename)
+            
+            with open(filepath, 'w') as f:
+                json.dump(manifest, f, indent=2)
+                
+            print(f"\nCreated manifest file: {filename}")
+            return filepath
+            
+        except Exception as e:
+            print(f"Error creating manifest: {e}")
+            return None
 
 def main():
-    """Main function to collect market data for all sets."""
-    print("\nStarting LEGO Market Data Collection...")
+    """Main function to run the market data collection."""
+    print("Starting LEGO Market Data Collection...")
     collector = MarketDataCollector()
     
-    # Read inventory
-    inventory_data = collector.read_inventory()
-    if inventory_data is None or inventory_data.empty:
-        print("No inventory data found")
-        return
+    # Check if specific set numbers were provided as command line arguments
+    if len(sys.argv) > 1:
+        set_numbers = sys.argv[1:]
+        print(f"Processing specified sets: {', '.join(set_numbers)}\n")
+    else:
+        # If no arguments provided, read all sets from inventory
+        set_numbers = collector.read_inventory()
+        if not set_numbers:
+            print("No sets to process. Please check your inventory file or provide set numbers as arguments.")
+            return
     
     # Process each set
-    data_files = {}
-    for _, row in inventory_data.iterrows():
-        set_number = row['Set']
+    data_files = []
+    for set_number in set_numbers:
         csv_path = collector.fetch_and_save_set_data(set_number)
         if csv_path:
-            data_files[set_number] = {
-                'csv_path': csv_path,
-                'set_name': row['Set Name'],
-                'my_price': float(row['Average Price'])
-            }
+            data_files.append(csv_path)
     
     # Create manifest file
-    if data_files:
-        manifest_file = collector.create_manifest(data_files)
-        print(f"\nData collection complete. Manifest saved to: {manifest_file}")
-        print(f"Total sets processed: {len(data_files)}")
-    else:
-        print("\nNo data collected for any sets")
+    collector.create_manifest(data_files)
+    
+    # Close the scraper
+    collector.scraper.close()
+    print("\nMarket data collection completed!")
 
 if __name__ == "__main__":
     main() 
