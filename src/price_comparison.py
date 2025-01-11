@@ -54,6 +54,7 @@ class PriceComparisonTool:
             # Create inventory data with correct columns
             inventory_data = pd.DataFrame()
             inventory_data['Set'] = valid_data['Set'].astype(str).apply(lambda x: str(int(float(x))))
+            inventory_data['Set Name'] = valid_data['Set Name']  # Add Set Name column
             inventory_data['Average Price'] = valid_data['Average price']
             
             # Remove any remaining invalid data
@@ -133,12 +134,20 @@ class PriceComparisonTool:
             print("No inventory data found")
             return None
 
+        # Get series mapping
+        series_mapping = self.read_series_names()
+        if series_mapping is None:
+            print("Warning: Could not read series names")
+            series_mapping = {}
+
         results = []
         for _, row in inventory_data.iterrows():
             try:
                 set_number = row['Set']
+                set_name = row['Set Name']
+                series_name = series_mapping.get(set_number, 'Unknown')  # Get series name from mapping
                 my_price = float(row['Average Price'])
-                print(f"\nProcessing set {set_number}")
+                print(f"\nProcessing set {set_number} ({set_name}) - Series: {series_name}")
                 
                 # Get current market data
                 ebay_data = self.scraper.fetch_ebay_sold_items(set_number)
@@ -155,6 +164,8 @@ class PriceComparisonTool:
                 
                 result = {
                     'LEGO Set Number': set_number,
+                    'Set Name': set_name,
+                    'Series': series_name,  # Add series name to results
                     'My Avg Buy Price': my_price,
                     'Market Avg Price': stats['avg_price'],
                     'Market Median Price': stats['median_price'],
@@ -188,12 +199,66 @@ class PriceComparisonTool:
         
         return results_df
 
+    def read_series_names(self):
+        """Debug function to read and extract series names from the Excel file."""
+        try:
+            print(f"\nReading series names from {self.inventory_file}")
+            
+            # Read the 'Overview Total' sheet
+            df = pd.read_excel(self.inventory_file, sheet_name='Overview Total')
+            
+            # Clean up the data
+            df = df.dropna(how='all')  # Remove completely empty rows
+            df = df.dropna(how='all', axis=1)  # Remove completely empty columns
+            
+            # Get the 'Set' column
+            set_column = df['Set'].fillna('')
+            
+            # Initialize variables
+            current_series = None
+            series_mapping = {}
+            
+            # Process each row
+            for value in set_column:
+                value = str(value).strip()
+                # Skip empty rows
+                if not value:
+                    continue
+                    
+                # If the value is not numeric, it's a series name
+                if not value.replace('.', '').isdigit():
+                    current_series = value
+                    print(f"\nFound series: {current_series}")
+                else:
+                    # If we have a current series and this is a set number
+                    if current_series:
+                        # Clean up the set number (remove decimal points)
+                        set_number = str(int(float(value)))
+                        series_mapping[set_number] = current_series
+                        print(f"Set {set_number} belongs to series {current_series}")
+            
+            print("\nComplete series mapping:")
+            for set_num, series in series_mapping.items():
+                print(f"Set {set_num}: {series}")
+                
+            return series_mapping
+            
+        except Exception as e:
+            print(f"Error reading series names: {e}")
+            return None
+
 def main():
     """Main function to run the price comparison tool."""
     print("\nStarting LEGO Price Comparison Tool...")
     tool = PriceComparisonTool()
     
-    # Check if specific set numbers were provided as command line arguments
+    # Debug: Read series names first
+    print("\nDebug: Reading series names...")
+    series_mapping = tool.read_series_names()
+    if series_mapping:
+        print(f"\nFound {len(series_mapping)} sets with series names")
+    
+    # Continue with normal operation...
     if len(sys.argv) > 1:
         set_numbers = sys.argv[1:]
         print(f"\nAnalyzing specific sets: {set_numbers}")
