@@ -1,126 +1,98 @@
-# LEGO Price Comparison Tool
+# LEGO Price Analysis Tool
 
-A Python-based tool for comparing personal LEGO inventory prices with current eBay market values. The tool consists of two main components: a scraper for fetching eBay data and a price comparison tool for analysis.
+A Python-based tool for analyzing LEGO set prices by comparing your inventory prices with current market data from eBay Germany.
 
 ## Features
 
-- Fetches current LEGO set prices from eBay.de
-- Compares your inventory prices with market prices
-- Calculates average and median prices
-- Filters for new items from Germany
-- Provides price difference percentages and potential profits
-- Includes shipping cost analysis
-- Supports both bulk analysis and specific set analysis
+- Reads inventory data from Excel file (`Reselling Profit Calculator2.xlsx`)
+- Fetches sold LEGO set prices from eBay Germany (ebay.de)
+- Filters for items sold in the last 30 days
+- Validates LEGO set numbers in titles to avoid wrong matches
+- Extracts comprehensive price data including:
+  - Item price
+  - Shipping cost
+  - Total price
+  - Actual sold dates
+  - Item condition
+  - Seller type (Private or Commercial)
+- Generates detailed price analysis including:
+  - Market average and median prices
+  - Price difference percentages
+  - Potential profits
+  - Average and median shipping costs
+  - Number of items sold
 
 ## Project Structure
 
 ```
-project_root/
+.
 ├── src/
-│   ├── scraper.py
-│   └── price_comparison.py
-├── data/
-│   └── (Generated CSV files)
-└── Inventory/
-    └── Reselling Profit Calculator2.xlsx
+│   ├── scraper.py          # eBay data scraping functionality
+│   ├── get_market_data.py  # Market data collection script
+│   └── price_comparison.py # Price analysis and reporting
+├── Inventory/              # Contains inventory Excel file
+└── data/                   # Stores scraped data and analysis results
 ```
+
+## Requirements
+
+- Python 3.9
+- Required packages (specified in environment.yml):
+  - selenium
+  - beautifulsoup4
+  - pandas
+  - python-dateutil
+  - flask
+  - webdriver-manager
 
 ## Setup
 
-1. Ensure you have Python 3.9 installed
-2. Install required packages:
-   ```bash
-   pip install selenium webdriver-manager beautifulsoup4 pandas python-dateutil openpyxl
-   ```
-3. Place your inventory Excel file in the `Inventory` folder
-   - File name should be: `Reselling Profit Calculator2.xlsx`
-   - Sheet name should be: `Overview Total`
+1. Create conda environment:
+```bash
+conda env create -f environment.yml
+```
+
+2. Activate environment:
+```bash
+conda activate ebayfetchsold
+```
 
 ## Usage
 
-### Price Comparison Tool (`price_comparison.py`)
+1. Place your inventory file (`Reselling Profit Calculator2.xlsx`) in the `Inventory` folder.
 
-The tool can be used in two modes:
+2. Collect market data:
+   - For all sets in your inventory:
+     ```bash
+     python src/get_market_data.py
+     ```
+   - For specific set numbers:
+     ```bash
+     python src/get_market_data.py 21044 76895 21054
+     ```
 
-1. Analyze All Sets:
-   ```bash
-   python src/price_comparison.py
-   ```
-   - This will analyze all LEGO sets in your inventory
-   - Results will be saved as `price_comparison_results_ALL_[timestamp].csv`
-
-2. Analyze Specific Sets:
-   ```bash
-   python src/price_comparison.py 21044 21034 21028
-   ```
-   - This will analyze only the specified set numbers
-   - Results will be saved as `price_comparison_results_SETS_21044_21034_21028_[timestamp].csv`
-
-The output CSV file includes:
-- LEGO Set Number
-- Set Name
-- Series (e.g., Architecture, Harry Potter)
-- Your Average Buy Price
-- Market Average Price
-- Market Median Price
-- Price Difference Percentages
-- Potential Profits
-- Shipping Costs
-
-### Scraper (`scraper.py`)
-
-The scraper is used internally by the price comparison tool but can also be used standalone:
-
-```python
-from scraper import EbayScraper
-
-scraper = EbayScraper()
-data = scraper.fetch_ebay_sold_items("21044")
+3. Generate price analysis:
+```bash
+python src/price_comparison.py
 ```
+Note: The price analysis will compare market data with your inventory prices, so the sets must be present in your inventory file.
 
-Features:
-- Fetches sold items from eBay.de
-- Filters for items sold in the last 30 days
-- Extracts:
-  - Item titles
-  - Sold dates
-  - Prices
-  - Shipping costs
-  - Item conditions
-  - Seller types
-  - Locations
-
-## Data Requirements
-
-The inventory Excel file should have the following structure:
-1. Sheet name: `Overview Total`
-2. Required columns:
-   - `Set`: LEGO set numbers and series names
-   - `Set Name`: Names of the LEGO sets
-   - `Average price`: Your purchase prices
-
-## Output Format
+## Output
 
 The tool generates a CSV file with the following columns:
-1. LEGO Set Number
-2. Set Name
-3. Series
-4. My Avg Buy Price
-5. Market Avg Price
-6. Market Median Price
-7. Avg Price Diff %
-8. Median Price Diff %
-9. Potential Profit (Avg)
-10. Potential Profit (Median)
-11. Avg Shipping
-12. Median Shipping
+- LEGO Set Number
+- Set Name
+- Series
+- Number Sold
+- My Avg Buy Price
+- Market Avg Price
+- Market Median Price
+- Avg Price Diff %
+- Median Price Diff %
+- Potential Profit (Avg)
+- Potential Profit (Median)
+- Avg Shipping
+- Median Shipping
 
-All numeric values are rounded to 2 decimal places.
-
-## Notes
-
-- The scraper focuses on items from Germany and in "Brandneu" (New) condition
-- Prices are in EUR
-- The tool automatically creates required directories
-- Results are saved in the `data` directory with timestamps
-- Series names are automatically extracted from the inventory file
+Results are saved in the `data` folder with filename format:
+`Price_Comparison_Results_STARTDATE_ENDDATE_TIMESTAMP.csv`
