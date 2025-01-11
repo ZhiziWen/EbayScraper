@@ -23,11 +23,21 @@ class PriceComparisonTool:
         # Setup directories
         self.base_dir = os.path.dirname(os.path.dirname(__file__))
         self.data_dir = os.path.join(self.base_dir, 'data')
-        self.inventory_file = os.path.join(self.data_dir, 'Reselling Profit Calculator2.xlsx')
+        self.inventory_dir = os.path.join(self.base_dir, 'Inventory')  # Add inventory directory
+        self.inventory_file = os.path.join(self.inventory_dir, 'Reselling Profit Calculator2.xlsx')
+        
+        # Create directories if they don't exist
+        os.makedirs(self.data_dir, exist_ok=True)
+        os.makedirs(self.inventory_dir, exist_ok=True)
         
         # Initialize scraper
         self.scraper = EbayScraper()
         print("Price Comparison Tool initialized")
+        
+        # Verify inventory file exists
+        if not os.path.exists(self.inventory_file):
+            print(f"Warning: Inventory file not found at {self.inventory_file}")
+            print("Please ensure the Excel file is in the Inventory folder")
 
     def read_inventory(self, set_numbers=None):
         """Read the inventory from Excel file.
@@ -79,10 +89,10 @@ class PriceComparisonTool:
         """Calculate market statistics including averages and medians."""
         if ebay_data is None or ebay_data.empty:
             return {
-                'avg_price': 0,
-                'median_price': 0,
-                'avg_shipping': 0,
-                'median_shipping': 0,
+                'avg_price': 0.00,
+                'median_price': 0.00,
+                'avg_shipping': 0.00,
+                'median_shipping': 0.00,
                 'items_found': 0
             }
 
@@ -94,25 +104,25 @@ class PriceComparisonTool:
         
         if filtered_data.empty:
             return {
-                'avg_price': 0,
-                'median_price': 0,
-                'avg_shipping': 0,
-                'median_shipping': 0,
+                'avg_price': 0.00,
+                'median_price': 0.00,
+                'avg_shipping': 0.00,
+                'median_shipping': 0.00,
                 'items_found': 0
             }
 
         # Calculate shipping statistics (excluding 0 shipping)
         shipping_data = filtered_data[filtered_data['Shipping Fee'] > 0]['Shipping Fee']
-        avg_shipping = shipping_data.mean() if not shipping_data.empty else 0
-        median_shipping = shipping_data.median() if not shipping_data.empty else 0
+        avg_shipping = round(shipping_data.mean(), 2) if not shipping_data.empty else 0.00
+        median_shipping = round(shipping_data.median(), 2) if not shipping_data.empty else 0.00
 
         # Calculate total price statistics
-        avg_total = filtered_data['Total Price'].mean()
-        median_total = filtered_data['Total Price'].median()
+        avg_total = round(filtered_data['Total Price'].mean(), 2)
+        median_total = round(filtered_data['Total Price'].median(), 2)
 
         return {
-            'avg_price': avg_total - avg_shipping,
-            'median_price': median_total - median_shipping,
+            'avg_price': round(avg_total - avg_shipping, 2),
+            'median_price': round(median_total - median_shipping, 2),
             'avg_shipping': avg_shipping,
             'median_shipping': median_shipping,
             'items_found': len(filtered_data)
@@ -145,8 +155,8 @@ class PriceComparisonTool:
             try:
                 set_number = row['Set']
                 set_name = row['Set Name']
-                series_name = series_mapping.get(set_number, 'Unknown')  # Get series name from mapping
-                my_price = float(row['Average Price'])
+                series_name = series_mapping.get(set_number, 'Unknown')
+                my_price = round(float(row['Average Price']), 2)
                 print(f"\nProcessing set {set_number} ({set_name}) - Series: {series_name}")
                 
                 # Get current market data
@@ -159,22 +169,22 @@ class PriceComparisonTool:
                 stats = self.calculate_market_stats(ebay_data)
                 
                 # Calculate price differences and potential profits
-                avg_diff = self.calculate_price_diff(stats['avg_price'], my_price)
-                median_diff = self.calculate_price_diff(stats['median_price'], my_price)
+                avg_diff = round(self.calculate_price_diff(stats['avg_price'], my_price), 2)
+                median_diff = round(self.calculate_price_diff(stats['median_price'], my_price), 2)
                 
                 result = {
                     'LEGO Set Number': set_number,
                     'Set Name': set_name,
-                    'Series': series_name,  # Add series name to results
-                    'My Avg Buy Price': my_price,
-                    'Market Avg Price': stats['avg_price'],
-                    'Market Median Price': stats['median_price'],
-                    'Avg Price Diff %': avg_diff,
-                    'Median Price Diff %': median_diff,
-                    'Potential Profit (Avg)': stats['avg_price'] - my_price,
-                    'Potential Profit (Median)': stats['median_price'] - my_price,
-                    'Avg Shipping': stats['avg_shipping'],
-                    'Median Shipping': stats['median_shipping']
+                    'Series': series_name,
+                    'My Avg Buy Price': round(my_price, 2),
+                    'Market Avg Price': round(stats['avg_price'], 2),
+                    'Market Median Price': round(stats['median_price'], 2),
+                    'Avg Price Diff %': round(avg_diff, 2),
+                    'Median Price Diff %': round(median_diff, 2),
+                    'Potential Profit (Avg)': round(stats['avg_price'] - my_price, 2),
+                    'Potential Profit (Median)': round(stats['median_price'] - my_price, 2),
+                    'Avg Shipping': round(stats['avg_shipping'], 2),
+                    'Median Shipping': round(stats['median_shipping'], 2)
                 }
                 
                 results.append(result)
@@ -191,10 +201,18 @@ class PriceComparisonTool:
         
         # Generate timestamp for filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'price_comparison_results_{timestamp}.csv'
         
-        # Save results
-        results_df.to_csv(os.path.join(self.data_dir, filename), index=False)
+        # Create filename based on search mode
+        if set_numbers:
+            # If specific sets were searched, include them in filename
+            sets_str = '_'.join(set_numbers)
+            filename = f'price_comparison_results_SETS_{sets_str}_{timestamp}.csv'
+        else:
+            # If all sets were searched, include ALL in filename
+            filename = f'price_comparison_results_ALL_{timestamp}.csv'
+        
+        # Save results with float format to ensure 2 decimal places
+        results_df.to_csv(os.path.join(self.data_dir, filename), index=False, float_format='%.2f')
         print(f"\nResults saved to {filename}")
         
         return results_df

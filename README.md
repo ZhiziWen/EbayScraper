@@ -1,79 +1,126 @@
-# eBay LEGO Price Scraper
+# LEGO Price Comparison Tool
 
-A Python scraper that fetches sold LEGO set prices from eBay Germany (ebay.de) using Selenium and BeautifulSoup.
+A Python-based tool for comparing personal LEGO inventory prices with current eBay market values. The tool consists of two main components: a scraper for fetching eBay data and a price comparison tool for analysis.
 
 ## Features
 
-- Searches for specific LEGO set numbers
-- Filters for items sold in Germany only
-- Returns prices in EUR only
-- Validates set numbers in titles to avoid wrong matches
-- Includes item price, shipping cost, and total price
-- Includes actual sold dates
-- Saves results to CSV file
-- Only fetches items sold in the last 30 days
+- Fetches current LEGO set prices from eBay.de
+- Compares your inventory prices with market prices
+- Calculates average and median prices
+- Filters for new items from Germany
+- Provides price difference percentages and potential profits
+- Includes shipping cost analysis
+- Supports both bulk analysis and specific set analysis
 
-## Requirements
+## Project Structure
 
-- Python 3.9+
-- Chrome browser installed
-- Conda (recommended for environment management)
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/YOUR_USERNAME/ebay-lego-scraper.git
-cd ebay-lego-scraper
+```
+project_root/
+├── src/
+│   ├── scraper.py
+│   └── price_comparison.py
+├── data/
+│   └── (Generated CSV files)
+└── Inventory/
+    └── Reselling Profit Calculator2.xlsx
 ```
 
-2. Create and activate the conda environment:
-```bash
-conda env create -f environment.yml
-conda activate ebay-scraper
-```
+## Setup
 
-3. Run the setup script:
-```bash
-python setup.py
-```
+1. Ensure you have Python 3.9 installed
+2. Install required packages:
+   ```bash
+   pip install selenium webdriver-manager beautifulsoup4 pandas python-dateutil openpyxl
+   ```
+3. Place your inventory Excel file in the `Inventory` folder
+   - File name should be: `Reselling Profit Calculator2.xlsx`
+   - Sheet name should be: `Overview Total`
 
 ## Usage
 
-1. Run the scraper:
-```bash
-python src/scraper.py
+### Price Comparison Tool (`price_comparison.py`)
+
+The tool can be used in two modes:
+
+1. Analyze All Sets:
+   ```bash
+   python src/price_comparison.py
+   ```
+   - This will analyze all LEGO sets in your inventory
+   - Results will be saved as `price_comparison_results_ALL_[timestamp].csv`
+
+2. Analyze Specific Sets:
+   ```bash
+   python src/price_comparison.py 21044 21034 21028
+   ```
+   - This will analyze only the specified set numbers
+   - Results will be saved as `price_comparison_results_SETS_21044_21034_21028_[timestamp].csv`
+
+The output CSV file includes:
+- LEGO Set Number
+- Set Name
+- Series (e.g., Architecture, Harry Potter)
+- Your Average Buy Price
+- Market Average Price
+- Market Median Price
+- Price Difference Percentages
+- Potential Profits
+- Shipping Costs
+
+### Scraper (`scraper.py`)
+
+The scraper is used internally by the price comparison tool but can also be used standalone:
+
+```python
+from scraper import EbayScraper
+
+scraper = EbayScraper()
+data = scraper.fetch_ebay_sold_items("21044")
 ```
 
-2. Enter LEGO set numbers when prompted (comma-separated):
-```
-Enter the LEGO set numbers separated by commas (e.g., 40632, 75257):
-```
+Features:
+- Fetches sold items from eBay.de
+- Filters for items sold in the last 30 days
+- Extracts:
+  - Item titles
+  - Sold dates
+  - Prices
+  - Shipping costs
+  - Item conditions
+  - Seller types
+  - Locations
 
-3. The scraper will:
-   - Search for each set number
-   - Filter results based on title validation
-   - Extract prices and shipping costs
-   - Save results to a CSV file in the `data` directory
+## Data Requirements
 
-## Output
+The inventory Excel file should have the following structure:
+1. Sheet name: `Overview Total`
+2. Required columns:
+   - `Set`: LEGO set numbers and series names
+   - `Set Name`: Names of the LEGO sets
+   - `Average price`: Your purchase prices
 
-Results are saved in the `data` directory with filename format: `ebay_sales_YYYYMMDD_HHMMSS.csv`
+## Output Format
 
-The CSV file contains:
-- Title
-- Item Price
-- Shipping Fee
-- Total Price
-- Currency
-- URL
-- Set Number
-- End Time (sold date)
-- Location
+The tool generates a CSV file with the following columns:
+1. LEGO Set Number
+2. Set Name
+3. Series
+4. My Avg Buy Price
+5. Market Avg Price
+6. Market Median Price
+7. Avg Price Diff %
+8. Median Price Diff %
+9. Potential Profit (Avg)
+10. Potential Profit (Median)
+11. Avg Shipping
+12. Median Shipping
+
+All numeric values are rounded to 2 decimal places.
 
 ## Notes
 
-- The scraper is specifically designed for eBay Germany (ebay.de)
-- Title validation ensures only one number with the same digit length as the target set number is allowed
+- The scraper focuses on items from Germany and in "Brandneu" (New) condition
 - Prices are in EUR
-- Shipping costs are included when available
+- The tool automatically creates required directories
+- Results are saved in the `data` directory with timestamps
+- Series names are automatically extracted from the inventory file

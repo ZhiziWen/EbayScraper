@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LEGO Price Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <style>
+        .container {
+            max-width: 1200px;
+        }
+        .stats-card {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stats-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Search Results</h1>
+            <a href="/" class="btn btn-outline-primary">New Search</a>
+        </div>
+
+        {% for set_number in set_numbers %}
+        {% set result = results[set_number] %}
+        <div class="card mb-5">
+            <div class="card-header">
+                <h3 class="card-title mb-0">LEGO Set {{ set_number }}</h3>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="stats-card">
+                            <div class="text-muted">Total Items</div>
+                            <div class="stats-value">{{ result.count }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stats-card">
+                            <div class="text-muted">Average Price</div>
+                            <div class="stats-value">€{{ "%.2f"|format(result.avg_price) }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stats-card">
+                            <div class="text-muted">Price Range</div>
+                            <div class="stats-value">€{{ "%.2f"|format(result.min_price) }} - €{{ "%.2f"|format(result.max_price) }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stats-card">
+                            <div class="text-muted">Date Range</div>
+                            <div class="stats-value" style="font-size: 1rem;">{{ result.date_range }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-striped" id="table-{{ set_number }}">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Price</th>
+                                <th>Shipping</th>
+                                <th>Total Price</th>
+                                <th>End Time</th>
+                                <th>Currency</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in result.data %}
+                            <tr>
+                                <td>{{ item.Title }}</td>
+                                <td>€{{ "%.2f"|format(item.Price) }}</td>
+                                <td>€{{ "%.2f"|format(item['Shipping Cost']) }}</td>
+                                <td>€{{ "%.2f"|format(item['Total Price']) }}</td>
+                                <td>{{ item['End Time'] }}</td>
+                                <td>{{ item.Currency }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3">
+                    <a href="{{ url_for('download_file', filename=result.file_name) }}" class="btn btn-success">
+                        Download CSV
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            {% for set_number in set_numbers %}
+            $('#table-{{ set_number }}').DataTable({
+                order: [[4, 'desc']], // Sort by End Time by default
+                pageLength: 25,
+                language: {
+                    search: "Filter results:"
+                }
+            });
+            {% endfor %}
+        });
+    </script>
+</body>
+</html> 
