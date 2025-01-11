@@ -116,8 +116,13 @@ class PriceAnalyzer:
                     continue
 
                 my_price = float(row['Average price'])
-                price_diff_percent = round(((stats['market_avg_price'] - my_price) / my_price) * 100, 2)
-                potential_profit = round(stats['market_avg_price'] - my_price, 2)
+                # Calculate both average and median price differences
+                avg_price_diff_percent = round(((stats['market_avg_price'] - my_price) / my_price) * 100, 2) if my_price > 0 else 0
+                median_price_diff_percent = round(((stats['market_median_price'] - my_price) / my_price) * 100, 2) if my_price > 0 else 0
+                
+                # Calculate both average and median potential profits
+                potential_profit_avg = round(stats['market_avg_price'] - my_price, 2)
+                potential_profit_median = round(stats['market_median_price'] - my_price, 2)
 
                 result = {
                     'LEGO Set Number': set_number,
@@ -127,8 +132,10 @@ class PriceAnalyzer:
                     'My Avg Buy Price': round(my_price, 2),
                     'Market Avg Price': stats['market_avg_price'],
                     'Market Median Price': stats['market_median_price'],
-                    'Avg Price Diff %': price_diff_percent,
-                    'Potential Profit': potential_profit,
+                    'Avg Price Diff %': avg_price_diff_percent,
+                    'Median Price Diff %': median_price_diff_percent,
+                    'Potential Profit (Avg)': potential_profit_avg,
+                    'Potential Profit (Median)': potential_profit_median,
                     'Avg Shipping': stats['avg_shipping'],
                     'Median Shipping': stats['median_shipping']
                 }
@@ -145,6 +152,24 @@ class PriceAnalyzer:
 
         # Create DataFrame and save to CSV
         results_df = pd.DataFrame(results)
+        # Ensure correct column order
+        column_order = [
+            'LEGO Set Number',
+            'Set Name',
+            'Series',
+            'Number Sold',
+            'My Avg Buy Price',
+            'Market Avg Price',
+            'Market Median Price',
+            'Avg Price Diff %',
+            'Median Price Diff %',
+            'Potential Profit (Avg)',
+            'Potential Profit (Median)',
+            'Avg Shipping',
+            'Median Shipping'
+        ]
+        results_df = results_df[column_order]
+        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         start_date = (datetime.now() - pd.Timedelta(days=30)).strftime('%Y%m%d')
         end_date = datetime.now().strftime('%Y%m%d')
