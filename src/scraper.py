@@ -297,6 +297,8 @@ class EbayScraper:
                             # Extract location
                             location_elem = item.select_one('span.s-item__location') or item.select_one('span.s-item__itemLocation')
                             location = location_elem.text if location_elem else 'Deutschland'
+                            if location.startswith('aus '):
+                                location = location[4:]  # Remove 'aus ' prefix
                             print(f"Location: {location}")
                             
                             # Extract item condition
@@ -319,7 +321,7 @@ class EbayScraper:
                             print(f"Seller Type: {seller_type}")
                             
                             # Calculate total price
-                            total_price = item_price + shipping_cost
+                            total_price = round(item_price + shipping_cost, 2)
                             
                             result = {
                                 'Title': title,
