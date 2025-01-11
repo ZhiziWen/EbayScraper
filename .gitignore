@@ -40,4 +40,8 @@ data/
 # Chrome WebDriver
 *.log
 chromedriver
-chromedriver.exe 
+chromedriver.exe
+
+# Ignore Inventory and data_ar2 folders
+Inventory/
+data_ar2/ 

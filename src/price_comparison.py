@@ -176,6 +176,7 @@ class PriceComparisonTool:
                     'LEGO Set Number': set_number,
                     'Set Name': set_name,
                     'Series': series_name,
+                    'Number Sold': stats['items_found'],
                     'My Avg Buy Price': round(my_price, 2),
                     'Market Avg Price': round(stats['avg_price'], 2),
                     'Market Median Price': round(stats['median_price'], 2),
