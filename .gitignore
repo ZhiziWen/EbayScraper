@@ -45,4 +45,10 @@ chromedriver.exe
 # Ignore Inventory and data_ar2 folders
 Inventory/
 data_ar2/
-data_ar4_done/ 
+data_ar4_done/
+
+# Ignore JSON files
+*.json
+
+# Ignore archiv/data_ar5 folder
+archiv/data_ar5/ 
