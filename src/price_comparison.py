@@ -109,7 +109,20 @@ class PriceAnalyzer:
 
             try:
                 market_data = pd.read_csv(market_data_file)
-                stats = self.calculate_statistics(market_data)
+                
+                # Filter for Deutschland location and New condition
+                # This ensures we only compare items that are New and from Germany
+                filtered_data = market_data[
+                    (market_data['Location'].str.contains('Deutschland', case=False, na=False)) &
+                    (market_data['Condition'].isin(['Brandneu', 'Brand New', 'New', 'Neu']))
+                ]
+                
+                if filtered_data.empty:
+                    print(f"Set {set_number}: No items match filter (New + Deutschland)")
+                    sets_without_data.append(set_number)
+                    continue
+                
+                stats = self.calculate_statistics(filtered_data)
                 
                 if stats is None:
                     sets_without_data.append(set_number)
