@@ -87,7 +87,7 @@ class MarketDataCollector:
             # Filter for Deutschland location and Brandneu condition
             filtered_data = ebay_data[
                 (ebay_data['Location'].str.contains('Deutschland', case=False, na=False)) &
-                (ebay_data['Condition'].isin(['Brandneu', 'Brand New', 'New', 'Neu']))
+                (ebay_data['Condition'].isin(['Brandneu', 'Brand New', 'New', 'Neu', 'Neu (Sonstige)']))
             ]
 
             if filtered_data.empty:

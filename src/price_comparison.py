@@ -114,7 +114,7 @@ class PriceAnalyzer:
                 # This ensures we only compare items that are New and from Germany
                 filtered_data = market_data[
                     (market_data['Location'].str.contains('Deutschland', case=False, na=False)) &
-                    (market_data['Condition'].isin(['Brandneu', 'Brand New', 'New', 'Neu']))
+                    (market_data['Condition'].isin(['Brandneu', 'Brand New', 'New', 'Neu', 'Neu (Sonstige)']))
                 ]
                 
                 if filtered_data.empty:
