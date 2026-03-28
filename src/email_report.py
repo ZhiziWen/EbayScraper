@@ -46,17 +46,17 @@ def add_recommendations(df):
         pct = row['Median Price Diff %']
         sold = row['Number Sold']
         if pct >= 20 and sold >= 5:
-            return ('立即出售', 1)
+            return ('Sell Now', 1)
         elif pct >= 10:
-            return ('考虑出售', 2)
+            return ('Consider Selling', 2)
         elif pct >= 0:
-            return ('暂时持有', 3)
+            return ('Hold', 3)
         else:
-            return ('不值得卖', 4)
+            return ('Not Worth Selling', 4)
 
     results = df.apply(_recommend, axis=1)
     df = df.copy()
-    df['建议'] = results.apply(lambda x: x[0])
+    df['Recommendation'] = results.apply(lambda x: x[0])
     df['_sort'] = results.apply(lambda x: x[1])
     return df.sort_values(['_sort', 'Median Price Diff %'], ascending=[True, False]).drop(columns=['_sort'])
 
@@ -87,19 +87,19 @@ def _section(df, title, header_color, bg_color):
     thead = f"""
         <thead>
             <tr style="background:{header_color};color:white">
-                <th style="padding:8px 10px;text-align:left">套装编号</th>
-                <th style="padding:8px 10px;text-align:left">名称</th>
-                <th style="padding:8px 10px;text-align:left">系列</th>
-                <th style="padding:8px 10px;text-align:right">买入价</th>
-                <th style="padding:8px 10px;text-align:right">市场中位价</th>
-                <th style="padding:8px 10px;text-align:right">利润%</th>
-                <th style="padding:8px 10px;text-align:right">利润额</th>
-                <th style="padding:8px 10px;text-align:right">近期成交数</th>
+                <th style="padding:8px 10px;text-align:left">Set #</th>
+                <th style="padding:8px 10px;text-align:left">Name</th>
+                <th style="padding:8px 10px;text-align:left">Series</th>
+                <th style="padding:8px 10px;text-align:right">Buy Price</th>
+                <th style="padding:8px 10px;text-align:right">Market Median</th>
+                <th style="padding:8px 10px;text-align:right">Profit %</th>
+                <th style="padding:8px 10px;text-align:right">Profit</th>
+                <th style="padding:8px 10px;text-align:right">Recent Sales</th>
             </tr>
         </thead>"""
     return f"""
     <h2 style="color:{header_color};margin-top:32px;margin-bottom:8px">
-        {title} &nbsp;<span style="font-size:14px;font-weight:normal;color:#666">({len(df)} 套)</span>
+        {title} &nbsp;<span style="font-size:14px;font-weight:normal;color:#666">({len(df)} sets)</span>
     </h2>
     <table style="border-collapse:collapse;width:100%;font-size:13px;background:{bg_color}">
         {thead}
@@ -110,10 +110,10 @@ def _section(df, title, header_color, bg_color):
 def generate_html(df, csv_path):
     today = datetime.now().strftime('%Y-%m-%d')
 
-    sell_now  = df[df['建议'] == '立即出售']
-    consider  = df[df['建议'] == '考虑出售']
-    hold      = df[df['建议'] == '暂时持有']
-    not_worth = df[df['建议'] == '不值得卖']
+    sell_now  = df[df['Recommendation'] == 'Sell Now']
+    consider  = df[df['Recommendation'] == 'Consider Selling']
+    hold      = df[df['Recommendation'] == 'Hold']
+    not_worth = df[df['Recommendation'] == 'Not Worth Selling']
 
     actionable_profit = (
         sell_now['Potential Profit (Median)'].sum() +
@@ -121,10 +121,10 @@ def generate_html(df, csv_path):
     )
 
     sections = (
-        _section(sell_now,  '立即出售  (利润 ≥ 20%，近期成交 ≥ 5)', '#27ae60', '#f6fff8') +
-        _section(consider,  '考虑出售  (利润 10–20%)',                '#e67e22', '#fffbf2') +
-        _section(hold,      '暂时持有  (利润 0–10%)',                 '#2980b9', '#f4f9ff') +
-        _section(not_worth, '不值得卖  (当前亏本)',                   '#c0392b', '#fff5f5')
+        _section(sell_now,  'Sell Now (Profit >= 20%, Recent Sales >= 5)',  '#27ae60', '#f6fff8') +
+        _section(consider,  'Consider Selling (Profit 10-20%)',            '#e67e22', '#fffbf2') +
+        _section(hold,      'Hold (Profit 0-10%)',                         '#2980b9', '#f4f9ff') +
+        _section(not_worth, 'Not Worth Selling (Negative Profit)',         '#c0392b', '#fff5f5')
     )
 
     return f"""<!DOCTYPE html>
@@ -133,46 +133,46 @@ def generate_html(df, csv_path):
 <body style="font-family:Arial,sans-serif;max-width:960px;margin:0 auto;padding:24px;color:#333">
 
 <h1 style="color:#2c3e50;border-bottom:3px solid #c0392b;padding-bottom:10px;margin-bottom:4px">
-    乐高价格分析报告
+    LEGO Price Analysis Report
 </h1>
 <p style="color:#888;margin-top:4px">
-    分析日期: {today} &nbsp;|&nbsp; 数据来源: eBay Deutschland 近30天成交
+    Date: {today} &nbsp;|&nbsp; Source: eBay Deutschland &mdash; last 30 days of sold listings
 </p>
 
 <table style="border-collapse:collapse;width:100%;margin:20px 0;text-align:center">
     <tr>
         <td style="background:#2c3e50;color:white;padding:16px;border-radius:6px 0 0 6px">
             <div style="font-size:32px;font-weight:bold">{len(df)}</div>
-            <div style="font-size:12px;margin-top:4px">分析套装总数</div>
+            <div style="font-size:12px;margin-top:4px">Sets Analyzed</div>
         </td>
         <td style="width:4px;background:white"></td>
         <td style="background:#27ae60;color:white;padding:16px">
             <div style="font-size:32px;font-weight:bold">{len(sell_now)}</div>
-            <div style="font-size:12px;margin-top:4px">建议立即出售</div>
+            <div style="font-size:12px;margin-top:4px">Sell Now</div>
         </td>
         <td style="width:4px;background:white"></td>
         <td style="background:#e67e22;color:white;padding:16px">
             <div style="font-size:32px;font-weight:bold">{len(consider)}</div>
-            <div style="font-size:12px;margin-top:4px">考虑出售</div>
+            <div style="font-size:12px;margin-top:4px">Consider Selling</div>
         </td>
         <td style="width:4px;background:white"></td>
         <td style="background:#c0392b;color:white;padding:16px;border-radius:0 6px 6px 0">
             <div style="font-size:32px;font-weight:bold">€{actionable_profit:.0f}</div>
-            <div style="font-size:12px;margin-top:4px">可出售套装预计总利润</div>
+            <div style="font-size:12px;margin-top:4px">Est. Total Profit</div>
         </td>
     </tr>
 </table>
 
 <div style="background:#eaf4fb;padding:12px 16px;border-left:4px solid #2980b9;font-size:13px;margin-bottom:8px">
-    <strong>注意：</strong> 利润数据未扣除 eBay 手续费（约13%）及运费，
-    实际到手利润以 <em>利润额 × 0.87 − 平均运费</em> 估算。
-    建议出售标准：中位利润 ≥ 20% 且近期成交 ≥ 5 笔。
+    <strong>Note:</strong> Profit = Market Median Price &minus; Median Shipping &minus; Buy Price.
+    eBay fees (~13%) are not yet deducted; estimated net profit after fees: <em>Profit &times; 0.87</em>.
+    "Sell Now" criteria: median profit &ge; 20% and &ge; 5 recent sales.
 </div>
 
 {sections}
 
 <p style="margin-top:32px;color:#aaa;font-size:12px">
-    完整数据见附件: {os.path.basename(csv_path)}
+    Full data attached: {os.path.basename(csv_path)}
 </p>
 </body>
 </html>"""
@@ -185,7 +185,7 @@ def send_email(config, html_body, csv_path):
     today = datetime.now().strftime('%Y-%m-%d')
 
     msg = MIMEMultipart('mixed')
-    msg['Subject'] = f'乐高价格分析报告 {today}'
+    msg['Subject'] = f'LEGO Price Analysis Report {today}'
     msg['From'] = sender
     msg['To'] = ', '.join(recipients)
 
@@ -220,14 +220,13 @@ def main():
     df = pd.read_csv(csv_path)
     df = add_recommendations(df)
 
-    sell_now = df[df['建议'] == '立即出售']
-    consider = df[df['建议'] == '考虑出售']
+    sell_now = df[df['Recommendation'] == 'Sell Now']
     print(f"\nAnalysis summary:")
     print(f"  Total sets:       {len(df)}")
     print(f"  Sell now:         {len(sell_now)}")
-    print(f"  Consider selling: {len(df[df['建议']=='考虑出售'])}")
-    print(f"  Hold:             {len(df[df['建议']=='暂时持有'])}")
-    print(f"  Not worth:        {len(df[df['建议']=='不值得卖'])}")
+    print(f"  Consider selling: {len(df[df['Recommendation']=='Consider Selling'])}")
+    print(f"  Hold:             {len(df[df['Recommendation']=='Hold'])}")
+    print(f"  Not worth:        {len(df[df['Recommendation']=='Not Worth Selling'])}")
     if not sell_now.empty:
         print(f"\n  Top picks to sell:")
         for _, row in sell_now.head(5).iterrows():

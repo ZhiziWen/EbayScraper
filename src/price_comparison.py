@@ -129,13 +129,17 @@ class PriceAnalyzer:
                     continue
 
                 my_price = float(row['Average price'])
-                # Calculate both average and median price differences
-                avg_price_diff_percent = round(((stats['market_avg_price'] - my_price) / my_price) * 100, 2) if my_price > 0 else 0
-                median_price_diff_percent = round(((stats['market_median_price'] - my_price) / my_price) * 100, 2) if my_price > 0 else 0
-                
-                # Calculate both average and median potential profits
-                potential_profit_avg = round(stats['market_avg_price'] - my_price, 2)
-                potential_profit_median = round(stats['market_median_price'] - my_price, 2)
+                # Net market price = total price - shipping (shipping is not seller revenue)
+                net_avg_price = stats['market_avg_price'] - stats['avg_shipping']
+                net_median_price = stats['market_median_price'] - stats['median_shipping']
+
+                # Calculate price differences based on net price
+                avg_price_diff_percent = round(((net_avg_price - my_price) / my_price) * 100, 2) if my_price > 0 else 0
+                median_price_diff_percent = round(((net_median_price - my_price) / my_price) * 100, 2) if my_price > 0 else 0
+
+                # Calculate potential profits (net of shipping)
+                potential_profit_avg = round(net_avg_price - my_price, 2)
+                potential_profit_median = round(net_median_price - my_price, 2)
 
                 result = {
                     'LEGO Set Number': set_number,
