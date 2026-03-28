@@ -191,7 +191,7 @@ class EbayScraper:
             german_to_english = {
                 'Jan': 'Jan', 'Jän': 'Jan', 'Januar': 'January',
                 'Feb': 'Feb', 'Februar': 'February',
-                'Mär': 'Mar', 'März': 'March',
+                'Mrz': 'Mar', 'Mär': 'Mar', 'März': 'March',
                 'Apr': 'Apr', 'April': 'April',
                 'Mai': 'May',
                 'Jun': 'Jun', 'Juni': 'June',
