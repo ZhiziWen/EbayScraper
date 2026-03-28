@@ -78,7 +78,14 @@ class EbayScraper:
         """
         Validate that the item title contains the correct LEGO set number.
         Only allows one number with the same digit length as the target set number.
+        Rejects individual part/minifigure listings (e.g. "AUS SET 21160").
         """
+        # Reject part listings: set number appears after "aus" (e.g. "AUS SET 21160", "aus 21160")
+        # Use (?!\d) instead of \b because eBay appends "Wird in neuem..." directly to the number
+        if re.search(rf'\baus\s+(set\s+)?{re.escape(target_set)}(?!\d)', title, re.I):
+            print(f"Part listing detected ('aus ... {target_set}') - rejecting")
+            return False
+
         numbers = re.findall(r'\d+', title)
         print(f"Title validation - Title: {title}")
         print(f"Found numbers: {numbers}")
@@ -692,7 +699,12 @@ class EbayScraper:
                         
                         # Calculate total price
                         total_price = round(item_price + shipping_cost, 2)
-                        
+
+                        # Skip items where price parsing failed (item_price = 0 means no price found)
+                        if item_price == 0:
+                            print(f"Skipping item with zero item price (price parsing failed): {title[:60]}")
+                            continue
+
                         result = {
                             'Title': title,
                             'Item Price': item_price,
