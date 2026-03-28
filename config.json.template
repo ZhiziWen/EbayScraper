@@ -1,0 +1,10 @@
+{
+    "email": {
+        "sender": "vegaswen@gmail.com",
+        "app_password": "在此填入Gmail应用专用密码（见下方说明）",
+        "recipients": [
+            "wenzhizi@foxmail.com",
+            "hhasb@web.de"
+        ]
+    }
+}

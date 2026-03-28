@@ -51,4 +51,7 @@ data_ar4_done/
 *.json
 
 # Ignore archiv/data_ar5 folder
-archiv/data_ar5/ 
+archiv/data_ar5/
+
+# Pipeline log and credentials (config.json is covered by *.json above)
+pipeline.log
