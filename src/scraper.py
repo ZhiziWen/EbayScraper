@@ -93,6 +93,11 @@ class EbayScraper:
             print(f"Individual minifigure with part code detected - rejecting")
             return False
 
+        # Reject multi-set bundle listings (e.g. "x4 Lego 40565", "2x", "3 Stück", "Lot")
+        if re.search(r'(^x[2-9]\s|^[2-9]x\s|\b[2-9]\s*stück\b|\blot\b|\bbundle\b)', title, re.I):
+            print(f"Multi-set bundle listing detected - rejecting")
+            return False
+
         # Reject listings selling only instructions/sticker sheets (not the full set)
         if re.search(r'\b(bauanleitung|anleitung|aufkleber|sticker)\b', title, re.I) and \
            not re.search(r'\b(neu|new|ovp|versiegelt|sealed)\b', title, re.I):
