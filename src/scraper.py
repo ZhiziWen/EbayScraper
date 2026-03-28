@@ -274,9 +274,8 @@ class EbayScraper:
             try:
                 # Load the page
                 driver.get(url)
-                time.sleep(2)  # Wait for page to load
-                
-                # Wait for search results - try multiple selectors
+
+                # Smart wait: try selectors with a combined timeout instead of fixed sleep
                 results_found = False
                 selectors_to_try = [
                     "ul.srp-results",
@@ -286,25 +285,23 @@ class EbayScraper:
                 ]
                 for selector in selectors_to_try:
                     try:
-                        WebDriverWait(driver, 5).until(
+                        WebDriverWait(driver, 8).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                         )
                         results_found = True
                         break
                     except TimeoutException:
                         continue
-                
+
                 if not results_found:
                     print("Timeout waiting for search results")
-                    # Try to see what's on the page
                     soup = BeautifulSoup(driver.page_source, 'html.parser')
-                    # Check for common eBay error messages
                     if soup.find(string=re.compile(r'keine.*ergebnisse|no.*results', re.I)):
                         print("No results found on eBay")
                     break
-                
-                # Wait a bit more for dynamic content
-                time.sleep(3)
+
+                # Short wait for remaining dynamic content (reduced from 3s)
+                time.sleep(1)
                 
                 # Parse the page
                 soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -724,7 +721,7 @@ class EbayScraper:
                 if has_next_page and not reached_old_items:
                     print(f"\nMoving to page {page + 1}")
                     page += 1
-                    time.sleep(2)
+                    time.sleep(1)  # Brief courtesy delay between pages
                 else:
                     print("\nNo more pages available")
                     
@@ -750,25 +747,17 @@ class EbayScraper:
             
             # Save to CSV
             filepath = self.save_results_to_csv(df, set_number)
-            
+
             # Print results for current set
             print(f"\nFound {len(df)} items for set {set_number}")
             print(f"\nResults for set {set_number}:")
             with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', None):
                 print(df[['Title', 'Item Price', 'Shipping Fee', 'Total Price', 'End Time', 'Condition', 'Seller Type', 'Currency', 'Location', 'URL']])
-            
-            # Close the browser
-            self.close_driver()
-            
-            # Return the DataFrame
+
+            # NOTE: Driver is kept alive for reuse across sets. Call close() when fully done.
             return df
         else:
             print(f"\nNo results found for set {set_number}")
-            
-            # Close the browser
-            self.close_driver()
-            
-            # Return None if no results
             return None
 
     def close(self):
