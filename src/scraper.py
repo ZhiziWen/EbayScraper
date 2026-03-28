@@ -86,6 +86,24 @@ class EbayScraper:
             print(f"Part listing detected ('aus ... {target_set}') - rejecting")
             return False
 
+        # Reject individual minifigures with explicit LEGO minifig part codes (e.g. sw1057, hp157)
+        # Check for both "Minifigur sw1057" and "sw1057 ... Minifigur" orderings; allow space in code
+        if re.search(r'\b(minifigur|minifig)\b', title, re.I) and \
+           re.search(r'\b[a-z]{2,3}\s?\d{3,4}\b', title, re.I):
+            print(f"Individual minifigure with part code detected - rejecting")
+            return False
+
+        # Reject listings selling only instructions/sticker sheets (not the full set)
+        if re.search(r'\b(bauanleitung|anleitung|aufkleber|sticker)\b', title, re.I) and \
+           not re.search(r'\b(neu|new|ovp|versiegelt|sealed)\b', title, re.I):
+            print(f"Instruction/sticker-only listing detected - rejecting")
+            return False
+
+        # Reject listings explicitly without box/OVP (sells for less, not comparable to sealed sets)
+        if re.search(r'\b(ohne\s+ovp|ohne\s+box|ohne\s+karton|karton\s+fehlt)\b', title, re.I):
+            print(f"Without-box listing detected - rejecting")
+            return False
+
         numbers = re.findall(r'\d+', title)
         print(f"Title validation - Title: {title}")
         print(f"Found numbers: {numbers}")
